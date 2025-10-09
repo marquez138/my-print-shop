@@ -1,0 +1,57 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Example base models; we'll extend with Design later
+model Customer {
+  id               String   @id @default(cuid())
+  clerkUserId      String   @unique
+  email            String   @unique
+  name             String?
+  stripeCustomerId String?  @unique
+  role             Role     @default(CUSTOMER)
+  orders           Order[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Order {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  email     String?
+  total     Int
+  currency  String   @default("usd")
+  status    String   @default("AWAITING_PAYMENT")
+  stripePaymentIntentId String? @unique
+  stripeChargeId        String? @unique
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  items      OrderItem[]
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  name      String
+  sku       String
+  qty       Int
+  unitPrice Int
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId   String
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}

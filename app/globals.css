@@ -1,4 +1,11 @@
-@import "tailwindcss";
+@import 'tailwindcss';
+
+/* (Optional) App-wide tweaks for the design canvas */
+.canvas-safe-zone {
+  outline: 2px dashed rgba(0, 0, 0, 0.12);
+  background: rgba(254, 240, 138, 0.35); /* amber-200-ish */
+  border-radius: 0.5rem;
+}
 
 :root {
   --background: #ffffff;
