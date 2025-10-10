@@ -10,7 +10,16 @@ export async function POST(
   const { id } = await ctx.params
 
   try {
-    const { message } = await req.json().catch(() => ({}))
+    let message = ''
+    const ct = req.headers.get('content-type') || ''
+    if (ct.includes('application/json')) {
+      const json = await req.json().catch(() => ({}))
+      message = (json?.message ?? '').toString()
+    } else if (ct.includes('application/x-www-form-urlencoded')) {
+      const fd = await req.formData()
+      message = (fd.get('message') ?? '').toString()
+    }
+
     if (!message || message.trim().length === 0) {
       return NextResponse.json({ error: 'Message required' }, { status: 400 })
     }

@@ -88,7 +88,7 @@ model Design {
   placements DesignPlacement[]
 
   // 👇 add this back-relation so Prisma can link comments → design
-  comments DesignComment[]
+  comments   DesignComment[]  // back-relation to DesignComment.design
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
