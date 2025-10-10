@@ -31,36 +31,57 @@ export default function UploadButton({
   async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+
+    // ✅ Read public env vars at runtime (must start with NEXT_PUBLIC_)
+    const cloud = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+    const preset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET
+
+    if (!cloud || !preset) {
+      console.error('Cloudinary env vars missing', { cloud, preset })
+      alert(
+        'Upload not configured. Please set NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME and NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET in .env.local, then restart dev.'
+      )
+      // reset input so user can try again later
+      e.target.value = ''
+      return
+    }
+
     try {
       setBusy(true)
+
       // --- Direct unsigned upload to Cloudinary (no widget) ---
       const form = new FormData()
       form.append('file', file)
-      form.append(
-        'upload_preset',
-        process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!
-      )
-      // optional: form.append('folder', 'my-print-shop/user_uploads')
+      form.append('upload_preset', preset)
+      // optional:
+      // form.append('folder', 'my-print-shop/user_uploads')
 
-      const cloud = process.env.CLOUDINARY_CLOUD_NAME!
       const res = await fetch(
         `https://api.cloudinary.com/v1_1/${cloud}/image/upload`,
-        {
-          method: 'POST',
-          body: form,
-        }
+        { method: 'POST', body: form }
       )
-      if (!res.ok) throw new Error(await res.text())
+
+      // Cloudinary returns JSON even on error; surface a helpful message
       const info = await res.json()
+      if (!res.ok) {
+        console.error('Cloudinary upload failed:', info)
+        const message =
+          info?.error?.message ||
+          `Upload failed (${res.status}) — check your unsigned preset is whitelisted.`
+        throw new Error(message)
+      }
+
       await onUploaded({
         secure_url: info.secure_url,
         public_id: info.public_id,
         width: info.width,
         height: info.height,
       })
+    } catch (err: any) {
+      alert(err?.message || 'Upload failed')
     } finally {
       setBusy(false)
-      e.target.value = '' // reset
+      e.target.value = '' // reset input so subsequent selects fire onChange
     }
   }
 
