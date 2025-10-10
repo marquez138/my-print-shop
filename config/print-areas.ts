@@ -1,118 +1,49 @@
+// config/print-areas.ts
+
+export type Side = 'front' | 'back' | 'sleeve'
+
+/** Every area must define its normalized safe-zone box inside the mockup canvas */
 export type PrintArea = {
   id: string
   label: string
-  side: 'front' | 'back' | 'sleeve'
-  mockup: string // path to flat outline image for that side
-  x: number // normalized 0..1
-  y: number
-  width: number
-  height: number
-  price: number // surcharge in cents
+  side: Side
+  /** Normalized safe-area in the mockup: 0..1 coordinates */
+  box: { x: number; y: number; w: number; h: number }
+  /** Optional mock image to show under the overlay in previews */
+  mock?: { src: string; alt?: string }
 }
 
+/**
+ * Example data — keep your existing `id`s, just add `box` (and mock if you have one).
+ * Tweak x/y/w/h to match your artwork safe zones.
+ */
 export const PRINT_AREAS: PrintArea[] = [
-  // Front
-  {
-    id: 'leftChest',
-    label: 'Left Chest',
-    side: 'front',
-    mockup: '/mockups/front.png',
-    x: 0.6,
-    y: 0.3,
-    width: 0.15,
-    height: 0.15,
-    price: 200,
-  },
-  {
-    id: 'centerChest',
-    label: 'Center Chest',
-    side: 'front',
-    mockup: '/mockups/front.png',
-    x: 0.3,
-    y: 0.3,
-    width: 0.4,
-    height: 0.14,
-    price: 300,
-  },
   {
     id: 'fullFront',
     label: 'Full Front',
     side: 'front',
-    mockup: '/mockups/front.png',
-    x: 0.3,
-    y: 0.3,
-    width: 0.4,
-    height: 0.4,
-    price: 500,
-  },
-  // {
-  //   id: 'oversizeFront',
-  //   label: 'Oversize Front',
-  //   side: 'front',
-  //   mockup: '/mockups/front.png',
-  //   x: 0.12,
-  //   y: 0.16,
-  //   width: 0.76,
-  //   height: 0.74,
-  //   price: 1200,
-  // },
-
-  // Back
-  {
-    id: 'backCollar',
-    label: 'Back Collar',
-    side: 'back',
-    mockup: '/mockups/back.png',
-    x: 0.46,
-    y: 0.21,
-    width: 0.1,
-    height: 0.06,
-    price: 200,
+    box: { x: 0.2, y: 0.18, w: 0.6, h: 0.6 },
+    mock: { src: '/images/mockups/tee-front.jpg', alt: 'Front mockup' },
   },
   {
-    id: 'upperBack',
-    label: 'Upper Back',
-    side: 'back',
-    mockup: '/mockups/back.png',
-    x: 0.3,
-    y: 0.23,
-    width: 0.4,
-    height: 0.14,
-    price: 300,
+    id: 'leftChest',
+    label: 'Left Chest',
+    side: 'front',
+    box: { x: 0.62, y: 0.24, w: 0.18, h: 0.18 },
+    mock: { src: '/images/mockups/tee-front.jpg', alt: 'Front mockup' },
   },
   {
     id: 'fullBack',
     label: 'Full Back',
     side: 'back',
-    mockup: '/mockups/back.png',
-    x: 0.3,
-    y: 0.24,
-    width: 0.4,
-    height: 0.45,
-    price: 500,
-  },
-
-  // Sleeve
-  {
-    id: 'leftSleeve',
-    label: 'Left Sleeve',
-    side: 'sleeve',
-    mockup: '/mockups/sleeve-left.png',
-    x: 0.28,
-    y: 0.48,
-    width: 0.45,
-    height: 0.2,
-    price: 200,
+    box: { x: 0.2, y: 0.18, w: 0.6, h: 0.6 },
+    mock: { src: '/images/mockups/tee-back.jpg', alt: 'Back mockup' },
   },
   {
     id: 'rightSleeve',
     label: 'Right Sleeve',
     side: 'sleeve',
-    mockup: '/mockups/sleeve-left.png',
-    x: 0.28,
-    y: 0.48,
-    width: 0.45,
-    height: 0.2,
-    price: 200,
+    box: { x: 0.65, y: 0.35, w: 0.2, h: 0.2 },
+    mock: { src: '/images/mockups/tee-front.jpg', alt: 'Sleeve mockup' },
   },
 ]

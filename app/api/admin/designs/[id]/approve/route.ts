@@ -1,41 +1,34 @@
-// app/api/admin/designs/[id]/approve/route.ts
-export const runtime = 'nodejs'
-
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/db'
-
-async function ensureAdmin() {
-  const { userId } = await auth()
-  if (!userId) throw Object.assign(new Error('Unauthorized'), { status: 401 })
-  const me = await prisma.customer.findFirst({
-    where: { clerkUserId: userId },
-    select: { role: true },
-  })
-  if (me?.role !== 'ADMIN')
-    throw Object.assign(new Error('Forbidden'), { status: 403 })
-  return userId
-}
+import { requireAdmin } from '@/lib/authz'
 
 export async function POST(
-  _req: Request,
+  _: Request,
   ctx: { params: Promise<{ id: string }> }
 ) {
-  try {
-    await ensureAdmin()
-    const { id } = await ctx.params
+  await requireAdmin()
+  const { id } = await ctx.params
 
+  try {
     const design = await prisma.design.update({
       where: { id },
       data: { status: 'approved' },
     })
 
-    return NextResponse.json({ design })
-  } catch (e: any) {
-    const status = e?.status ?? 500
+    await prisma.designComment.create({
+      data: {
+        designId: id,
+        author: 'admin',
+        body: 'Design approved for production.',
+      },
+    })
+
+    return NextResponse.json({ ok: true, design })
+  } catch (err) {
+    console.error('Approve failed', err)
     return NextResponse.json(
-      { error: e?.message || 'Server error' },
-      { status }
+      { error: 'Unable to approve design' },
+      { status: 500 }
     )
   }
 }
