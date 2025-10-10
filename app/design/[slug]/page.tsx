@@ -6,6 +6,8 @@ import DesignCanvas from '@/components/Design/DesignCanvas'
 import PrintAreaList from '@/components/Design/PrintAreaList'
 import PriceSummary from '@/components/Design/PriceSummary'
 import UploadButton from '@/components/Design/UploadButton'
+import DesignStatusBanner from '@/components/Design/DesignStatusBanner'
+import CommentsList from '@/components/Design/CommentsList'
 
 type ServerDesign = {
   id: string
@@ -14,6 +16,12 @@ type ServerDesign = {
   pricingTotal: number
   status: string
   placements?: { areaId: string; url: string }[]
+  comments?: {
+    id: string
+    author: string
+    body: string
+    createdAt: string
+  }[]
 }
 
 export default function DesignPage({
@@ -139,6 +147,7 @@ export default function DesignPage({
     <div className='grid grid-cols-1 lg:grid-cols-12 gap-8'>
       {/* Left panel */}
       <aside className='lg:col-span-3 space-y-6'>
+        {design && <DesignStatusBanner status={design.status} />}
         <h1 className='text-2xl font-semibold uppercase'>{slug}</h1>
 
         <PriceSummary basePrice={effectiveBase} uploads={uploads} />
@@ -167,6 +176,18 @@ export default function DesignPage({
           Only one design per side is allowed. Uploading to another area on the
           same side will replace it.
         </p>
+
+        {design?.comments && design.comments.length > 0 && (
+          <div className='mt-8'>
+            <h3 className='font-semibold mb-2'>Admin Comments</h3>
+            <CommentsList
+              comments={design.comments.map((c) => ({
+                ...c,
+                createdAt: c.createdAt.toString(),
+              }))}
+            />
+          </div>
+        )}
       </aside>
 
       {/* Center canvas */}

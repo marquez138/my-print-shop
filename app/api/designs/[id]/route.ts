@@ -7,7 +7,7 @@ import { prisma } from '@/lib/db'
 
 /**
  * GET /api/designs/:id
- * Returns one design with all placements and comments
+ * Returns one design with placements and comments (comments are ISO-string dates for client use)
  */
 export async function GET(
   _req: Request,
@@ -23,6 +23,7 @@ export async function GET(
         placements: true,
         comments: {
           orderBy: { createdAt: 'asc' },
+          select: { id: true, author: true, body: true, createdAt: true },
         },
       },
     })
@@ -42,7 +43,17 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({ design })
+    // 🔧 Serialize Date → string for client components that expect strings
+    const payload = {
+      ...design,
+      comments: design.comments.map((c) => ({
+        ...c,
+        createdAt: c.createdAt.toISOString(),
+      })),
+      // (If you ever need to serialize placement dates, do it here too.)
+    }
+
+    return NextResponse.json({ design: payload })
   } catch (err: any) {
     console.error('[GET /api/designs/:id]', err)
     return NextResponse.json(
