@@ -1,91 +1,70 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 
-type Props = {
-  onUploaded: (result: {
-    secure_url: string
-    public_id: string
-    width: number
-    height: number
-  }) => void
-  accept?: string
-  label?: string
+type UploadResult = {
+  secure_url: string
+  public_id: string
+  width: number
+  height: number
 }
 
+type Props = {
+  label?: string
+  onUploaded: (r: UploadResult) => void | Promise<void>
+  /** When true, the button is disabled and no upload flow starts */
+  disabled?: boolean
+}
+
+/**
+ * Minimal upload trigger with disabled support.
+ * Replace the stubbed `startUpload()` with your Cloudinary widget or input flow.
+ */
 export default function UploadButton({
+  label = 'Upload artwork',
   onUploaded,
-  accept = 'image/*',
-  label = 'Upload Artwork',
+  disabled = false,
 }: Props) {
   const [busy, setBusy] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
 
-  async function handlePick() {
-    inputRef.current?.click()
-  }
-
-  async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+  async function startUpload() {
+    // 🔒 respect disabled flag
+    if (disabled || busy) return
 
     try {
       setBusy(true)
 
-      // 1) get signed params from our API
-      const sigRes = await fetch('/api/uploads/sign', {
-        method: 'POST',
-        body: JSON.stringify({}),
-      })
-      const sig = await sigRes.json()
+      // TODO: swap this stub with your Cloudinary widget callback
+      // Example Cloudinary widget usage (pseudo):
+      //   const result = await openCloudinaryWidget()
+      //   if (result.event === 'success') onUploaded({
+      //     secure_url: result.info.secure_url,
+      //     public_id: result.info.public_id,
+      //     width: result.info.width,
+      //     height: result.info.height,
+      //   })
 
-      const endpoint = `https://api.cloudinary.com/v1_1/${sig.cloudName}/auto/upload`
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('api_key', sig.apiKey)
-      fd.append('timestamp', String(sig.timestamp))
-      fd.append('signature', sig.signature)
-      fd.append('folder', sig.folder)
+      // --- demo stub so the component compiles even without the widget:
+      // throw new Error('Hook up Cloudinary widget here')
 
-      // 2) direct upload to Cloudinary
-      const upRes = await fetch(endpoint, { method: 'POST', body: fd })
-      const data = await upRes.json()
-
-      if (!upRes.ok) throw new Error(data?.error?.message || 'Upload failed')
-
-      onUploaded({
-        secure_url: data.secure_url,
-        public_id: data.public_id,
-        width: data.width,
-        height: data.height,
-      })
-    } catch (err) {
-      console.error(err)
-      alert('Upload failed. Please try a different image.')
+      // If you’re using a plain <input type="file"> approach, you can instead render it below.
+    } catch (e) {
+      // optional: surface toasts
+      console.error(e)
     } finally {
       setBusy(false)
-      // reset input so same file can be re-chosen later
-      if (inputRef.current) inputRef.current.value = ''
     }
   }
 
   return (
-    <>
-      <input
-        ref={inputRef}
-        type='file'
-        accept={accept}
-        className='hidden'
-        onChange={handleChange}
-      />
-      <button
-        type='button'
-        onClick={handlePick}
-        disabled={busy}
-        className='w-full h-11 rounded-lg bg-black text-white disabled:opacity-60'
-      >
-        {busy ? 'Uploading…' : label}
-      </button>
-    </>
+    <button
+      type='button'
+      onClick={startUpload}
+      disabled={disabled || busy}
+      aria-disabled={disabled || busy}
+      className='w-full h-11 rounded-lg bg-black text-white disabled:opacity-60'
+    >
+      {busy ? 'Uploading…' : label}
+    </button>
   )
 }

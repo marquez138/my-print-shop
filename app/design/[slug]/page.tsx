@@ -8,6 +8,7 @@ import PriceSummary from '@/components/Design/PriceSummary'
 import UploadButton from '@/components/Design/UploadButton'
 import DesignStatusBanner from '@/components/Design/DesignStatusBanner'
 import CommentsList from '@/components/Design/CommentsList'
+import { useToast } from '@/components/common/Toast'
 
 type ServerDesign = {
   id: string
@@ -40,7 +41,10 @@ export default function DesignPage({
   const [activeArea, setActiveArea] = useState<PrintArea>(PRINT_AREAS[0])
   const [uploads, setUploads] = useState<Record<string, string>>({})
   const [design, setDesign] = useState<ServerDesign | null>(null)
+  const canEdit =
+    design?.status === 'draft' || design?.status === 'changes_requested'
   const [busy, setBusy] = useState(false)
+  const { toast, Toast } = useToast()
 
   // 🌟 STEP 1: Try to hydrate an existing draft first
   useEffect(() => {
@@ -53,7 +57,6 @@ export default function DesignPage({
         if (existing.ok) {
           const data = await existing.json()
           if (data.design) {
-            console.log('Hydrated existing design:', data.design.id)
             if (mounted) {
               setDesign(data.design)
               // preload any existing artwork previews
@@ -111,6 +114,8 @@ export default function DesignPage({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          // ✅ include side for the composite unique key (designId_side)
+          side: activeArea.side, // <— ✅ add this
           areaId: activeArea.id,
           assetId: r.public_id,
           url: r.secure_url,
@@ -121,6 +126,7 @@ export default function DesignPage({
       if (!res.ok) throw new Error(await res.text())
       const data = await res.json()
       setDesign(data.design)
+      toast('Artwork saved')
     } catch (err) {
       console.error(err)
       alert('Failed to save placement.')
@@ -158,7 +164,7 @@ export default function DesignPage({
         {hasArt ? (
           <button
             onClick={clearActive}
-            disabled={busy}
+            disabled={busy || !canEdit}
             className='w-full h-11 rounded-lg border border-gray-300 disabled:opacity-60'
           >
             Remove artwork from “{activeArea.label}”
@@ -169,9 +175,14 @@ export default function DesignPage({
               busy ? 'Please wait…' : `Upload artwork to “${activeArea.label}”`
             }
             onUploaded={handleUploaded}
+            disabled={!canEdit || busy}
           />
         )}
-
+        {!canEdit && (
+          <p className='mt-2 text-xs text-gray-500'>
+            Editing is disabled while your design is <b>{design?.status}</b>.
+          </p>
+        )}
         <p className='text-sm text-gray-600'>
           Only one design per side is allowed. Uploading to another area on the
           same side will replace it.
@@ -207,31 +218,48 @@ export default function DesignPage({
           uploads={uploads}
         />
 
-        {/* Submit for approval */}
+        {/* ✅ Single submit/resubmit button */}
         <button
-          className='w-full h-11 rounded-lg bg-black text-white disabled:opacity-60'
-          disabled={!design || busy}
+          className='mt-4 w-full h-11 rounded-lg bg-black text-white disabled:opacity-60'
+          disabled={!design || busy || design.status === 'submitted'}
           onClick={async () => {
             if (!design) return
-            const res = await fetch(`/api/designs/${design.id}/submit`, {
-              method: 'POST',
-            })
-            const data = await res.json()
-            if (!res.ok) {
-              alert(data?.error || 'Submit failed')
-              return
+            setBusy(true)
+            try {
+              const res = await fetch(`/api/designs/${design.id}/submit`, {
+                method: 'POST',
+              })
+              const data = await res.json()
+              if (!res.ok) {
+                alert(data?.error || 'Submit failed')
+                return
+              }
+              setDesign(data.design)
+              toast(
+                design.status === 'changes_requested'
+                  ? 'Resubmitted for review'
+                  : 'Submitted for approval'
+              )
+            } catch (e) {
+              console.error(e)
+              alert('Submit failed')
+            } finally {
+              setBusy(false)
             }
-            setDesign(data.design)
-            alert('Submitted for approval!')
           }}
         >
           {busy
             ? 'Submitting…'
             : design?.status === 'submitted'
             ? 'Submitted'
+            : design?.status === 'changes_requested'
+            ? 'Resubmit for review'
             : 'Submit for approval'}
         </button>
       </aside>
+
+      {/* toasts */}
+      {Toast}
     </div>
   )
 }
