@@ -9,7 +9,7 @@ export default function DesignCanvas({
   artUrl?: string
 }) {
   return (
-    <div className='relative aspect-[4/5] bg-gray-50 rounded-xl overflow-hidden'>
+    <div className='relative aspect-[4/5] bg-gray-50  overflow-hidden'>
       {/* Base mockup for the side */}
       <Image
         src={area.mockup}

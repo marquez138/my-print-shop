@@ -12,7 +12,7 @@ export default function ProductPage({
   const { slug } = use(params)
 
   // placeholder product data for Phase 1
-  const product = { slug, name: 'Unisex Jersey Tee', basePrice: 2500 }
+  const product = { slug, name: 'Unisex Jersey Tee', basePrice: 800 }
 
   return (
     <div className='grid grid-cols-1 lg:grid-cols-12 gap-8'>

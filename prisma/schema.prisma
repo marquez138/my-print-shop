@@ -27,31 +27,113 @@ model Customer {
 }
 
 model Order {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  email     String?
-  total     Int
-  currency  String   @default("usd")
-  status    String   @default("AWAITING_PAYMENT")
-  stripePaymentIntentId String? @unique
-  stripeChargeId        String? @unique
-  customerId String?
-  customer   Customer? @relation(fields: [customerId], references: [id])
-  items      OrderItem[]
+  id                    String      @id @default(cuid())
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  email                 String?
+  total                 Int
+  currency              String      @default("usd")
+  status                String      @default("AWAITING_PAYMENT")
+  stripePaymentIntentId String?     @unique
+  stripeChargeId        String?     @unique
+  customerId            String?
+  customer              Customer?   @relation(fields: [customerId], references: [id])
+  items                 OrderItem[]
 }
 
 model OrderItem {
-  id        String   @id @default(cuid())
+  id        String @id @default(cuid())
   name      String
   sku       String
   qty       Int
   unitPrice Int
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order     Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
   orderId   String
 }
 
 enum Role {
   CUSTOMER
   ADMIN
+}
+
+// ---------- New for My-Print-Shop ----------
+
+enum PrintSide {
+  front
+  back
+  sleeve
+}
+
+model Design {
+  id          String  @id @default(cuid())
+  userId      String?
+  anonymousId String?
+
+  productId  String
+  variantSku String
+
+  status String @default("draft") // draft | approved | ordered
+
+  pricingBase  Int
+  pricingFees  Int
+  pricingTotal Int
+
+  previewFront String?
+  previewBack  String?
+  previewLeft  String?
+  previewRight String?
+
+  printSpec Json
+
+  placements DesignPlacement[]
+
+  // 👇 add this back-relation so Prisma can link comments → design
+  comments DesignComment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DesignComment {
+  id        String   @id @default(cuid())
+  designId  String
+  design    Design   @relation(fields: [designId], references: [id], onDelete: Cascade)
+  author    String // "admin" | "user"
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([designId, createdAt])
+}
+
+model DesignPlacement {
+  id String @id @default(cuid())
+
+  designId String
+  design   Design @relation(fields: [designId], references: [id], onDelete: Cascade)
+
+  // one placement per side (e.g., left chest OR full front) — enforced below
+  side PrintSide
+
+  // ID of the area as defined in your `/config/print-areas.ts` (e.g., "leftChest")
+  areaId String
+
+  // Cloudinary asset info
+  assetId String // public_id
+  url     String // secure_url
+
+  // Transform relative to the safe-zone; we keep defaults to “top” alignment
+  x        Float @default(0) // 0..1 (left)
+  y        Float @default(0) // 0..1 (top)
+  scale    Float @default(1)
+  rotation Float @default(0)
+
+  widthPx  Int // original asset size
+  heightPx Int
+  dpi      Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 🔒 Enforce exactly one placement per side for a given design
+  @@unique([designId, side], name: "designId_side")
 }
