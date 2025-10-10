@@ -6,7 +6,6 @@ export default async function AccountLayout({
 }: {
   children: React.ReactNode
 }) {
-  // Redirects to /sign-in if not logged in
   await requireUser()
-  return <div className='mx-auto max-w-5xl p-6'>{children}</div>
+  return <>{children}</>
 }
