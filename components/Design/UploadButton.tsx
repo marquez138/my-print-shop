@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 type UploadResult = {
   secure_url: string
@@ -12,59 +12,76 @@ type UploadResult = {
 type Props = {
   label?: string
   onUploaded: (r: UploadResult) => void | Promise<void>
-  /** When true, the button is disabled and no upload flow starts */
   disabled?: boolean
 }
 
-/**
- * Minimal upload trigger with disabled support.
- * Replace the stubbed `startUpload()` with your Cloudinary widget or input flow.
- */
 export default function UploadButton({
   label = 'Upload artwork',
   onUploaded,
-  disabled = false,
+  disabled,
 }: Props) {
+  const inputRef = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState(false)
 
-  async function startUpload() {
-    // 🔒 respect disabled flag
+  async function handlePick() {
     if (disabled || busy) return
+    inputRef.current?.click()
+  }
 
+  async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
     try {
       setBusy(true)
+      // --- Direct unsigned upload to Cloudinary (no widget) ---
+      const form = new FormData()
+      form.append('file', file)
+      form.append(
+        'upload_preset',
+        process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!
+      )
+      // optional: form.append('folder', 'my-print-shop/user_uploads')
 
-      // TODO: swap this stub with your Cloudinary widget callback
-      // Example Cloudinary widget usage (pseudo):
-      //   const result = await openCloudinaryWidget()
-      //   if (result.event === 'success') onUploaded({
-      //     secure_url: result.info.secure_url,
-      //     public_id: result.info.public_id,
-      //     width: result.info.width,
-      //     height: result.info.height,
-      //   })
-
-      // --- demo stub so the component compiles even without the widget:
-      // throw new Error('Hook up Cloudinary widget here')
-
-      // If you’re using a plain <input type="file"> approach, you can instead render it below.
-    } catch (e) {
-      // optional: surface toasts
-      console.error(e)
+      const cloud = process.env.CLOUDINARY_CLOUD_NAME!
+      const res = await fetch(
+        `https://api.cloudinary.com/v1_1/${cloud}/image/upload`,
+        {
+          method: 'POST',
+          body: form,
+        }
+      )
+      if (!res.ok) throw new Error(await res.text())
+      const info = await res.json()
+      await onUploaded({
+        secure_url: info.secure_url,
+        public_id: info.public_id,
+        width: info.width,
+        height: info.height,
+      })
     } finally {
       setBusy(false)
+      e.target.value = '' // reset
     }
   }
 
   return (
-    <button
-      type='button'
-      onClick={startUpload}
-      disabled={disabled || busy}
-      aria-disabled={disabled || busy}
-      className='w-full h-11 rounded-lg bg-black text-white disabled:opacity-60'
-    >
-      {busy ? 'Uploading…' : label}
-    </button>
+    <>
+      <input
+        ref={inputRef}
+        type='file'
+        accept='image/*'
+        className='hidden'
+        onChange={handleChange}
+        disabled={disabled}
+      />
+      <button
+        type='button'
+        onClick={handlePick}
+        disabled={disabled || busy}
+        className='w-full h-11 rounded-lg bg-black text-white disabled:opacity-60'
+      >
+        {busy ? 'Uploading…' : label}
+      </button>
+    </>
   )
 }

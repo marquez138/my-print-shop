@@ -1,47 +1,82 @@
-// config/print-areas.ts
 export type Side = 'front' | 'back' | 'sleeve'
-
 export type PrintArea = {
   id: string
   label: string
-  side: Side
+  side: 'front' | 'back' | 'sleeve'
   box: { x: number; y: number; w: number; h: number }
   mock?: { src: string; alt?: string }
-  /** Optional per-side surcharge (in cents) applied when this area has an upload */
-  surchargeCents?: number
+  price?: number // <-- ensure this exists
 }
 
 export const PRINT_AREAS: PrintArea[] = [
+  // FRONT
   {
-    id: 'fullFront',
+    id: 'front-full',
     label: 'Full Front',
     side: 'front',
-    box: { x: 0.2, y: 0.18, w: 0.6, h: 0.6 },
-    mock: { src: '/images/mockups/tee-front.jpg' },
-    surchargeCents: 1000, // $10
+    box: { x: 0.15, y: 0.12, w: 0.7, h: 0.75 },
+    mock: { src: '/mockups/tee-front.png', alt: 'Front mockup' },
+    price: 600,
   },
   {
-    id: 'leftChest',
+    id: 'left-chest',
     label: 'Left Chest',
     side: 'front',
-    box: { x: 0.62, y: 0.24, w: 0.18, h: 0.18 },
-    mock: { src: '/images/mockups/tee-front.jpg' },
-    surchargeCents: 500, // $5
+    box: { x: 0.62, y: 0.2, w: 0.2, h: 0.2 },
+    mock: { src: '/mockups/tee-front.png' },
+    price: 300,
   },
   {
-    id: 'fullBack',
+    id: 'right-chest',
+    label: 'Right Chest',
+    side: 'front',
+    box: { x: 0.18, y: 0.2, w: 0.2, h: 0.2 },
+    mock: { src: '/mockups/tee-front.png' },
+    price: 300,
+  },
+  // “Collar” mapped to FRONT to avoid enum migration
+  {
+    id: 'collar',
+    label: 'Collar',
+    side: 'front', // ← map under an existing side
+    box: { x: 0.38, y: 0.04, w: 0.24, h: 0.1 },
+    mock: { src: '/mockups/tee-front.png' },
+    price: 200,
+  },
+
+  // BACK
+  {
+    id: 'back-full',
     label: 'Full Back',
     side: 'back',
-    box: { x: 0.2, y: 0.18, w: 0.6, h: 0.6 },
-    mock: { src: '/images/mockups/tee-back.jpg' },
-    surchargeCents: 1000,
+    box: { x: 0.15, y: 0.12, w: 0.7, h: 0.75 },
+    mock: { src: '/mockups/tee-back.png', alt: 'Back mockup' },
+    price: 600,
   },
   {
-    id: 'rightSleeve',
+    id: 'neck-tag',
+    label: 'Neck Tag',
+    side: 'back',
+    box: { x: 0.38, y: 0.06, w: 0.24, h: 0.12 },
+    mock: { src: '/mockups/tee-back.png' },
+    price: 250,
+  },
+
+  // SLEEVE
+  {
+    id: 'sleeve-left',
+    label: 'Left Sleeve',
+    side: 'sleeve',
+    box: { x: 0.15, y: 0.3, w: 0.3, h: 0.3 },
+    mock: { src: '/mockups/tee-sleeve-left.png' },
+    price: 250,
+  },
+  {
+    id: 'sleeve-right',
     label: 'Right Sleeve',
     side: 'sleeve',
-    box: { x: 0.65, y: 0.35, w: 0.2, h: 0.2 },
-    mock: { src: '/images/mockups/tee-front.jpg' },
-    surchargeCents: 400, // $4
+    box: { x: 0.55, y: 0.3, w: 0.3, h: 0.3 },
+    mock: { src: '/mockups/tee-sleeve-right.png' },
+    price: 250,
   },
 ]
