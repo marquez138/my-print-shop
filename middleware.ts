@@ -1,27 +1,30 @@
 // middleware.ts
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 
+// ✅ Define which routes require authentication
 const protectedRoutes = createRouteMatcher([
-  '/design(.*)',
-  '/api/design(.*)',
-  '/api/uploads(.*)',
   '/account(.*)',
+  '/checkout(.*)',
+  '/api/checkout(.*)',
   '/admin(.*)',
   '/api/admin(.*)',
 ])
 
 export default clerkMiddleware(async (auth, req) => {
-  if (protectedRoutes(req)) await auth.protect()
+  // Skip webhooks & static files
+  const path = req.nextUrl.pathname
+  if (path.startsWith('/api/webhooks')) return
+
+  // 🔒 Protect only selected routes
+  if (protectedRoutes(req)) {
+    await auth()
+  }
 })
 
+// ✅ Configure where middleware runs
 export const config = {
   matcher: [
-    '/design(.*)',
-    '/api/design(.*)',
-    '/api/uploads(.*)',
-    '/account(.*)',
-    '/admin(.*)',
-    '/api/admin(.*)',
-    // ❌ do NOT add /api/webhooks/*
+    // These paths require Clerk session handling
+    '/((?!_next|.*\\..*|api/webhooks).*)',
   ],
 }
