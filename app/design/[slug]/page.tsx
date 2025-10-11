@@ -1,6 +1,7 @@
 'use client'
 
-import { use, useEffect, useMemo, useState } from 'react'
+import { use, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { PRINT_AREAS, type PrintArea } from '@/config/print-areas'
 import DesignCanvas from '@/components/Design/DesignCanvas'
 import PrintAreaList from '@/components/Design/PrintAreaList'
@@ -30,10 +31,12 @@ export default function DesignPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>
-  searchParams: Promise<{ base?: string }>
+  searchParams: Promise<{ base?: string; designId?: string }>
 }) {
+  const router = useRouter()
   const { slug } = use(params)
   const resolvedSearch = use(searchParams)
+  const designId = resolvedSearch?.designId
   const basePrice = Number.isFinite(Number(resolvedSearch?.base))
     ? Number(resolvedSearch!.base)
     : 2500
@@ -41,52 +44,44 @@ export default function DesignPage({
   const [activeArea, setActiveArea] = useState<PrintArea>(PRINT_AREAS[0])
   const [uploads, setUploads] = useState<Record<string, string>>({})
   const [design, setDesign] = useState<ServerDesign | null>(null)
-  const canEdit =
-    design?.status === 'draft' || design?.status === 'changes_requested'
   const [busy, setBusy] = useState(false)
   const { toast, Toast } = useToast()
 
-  // 🌟 STEP 1: Try to hydrate an existing draft first
+  const canEdit =
+    design?.status === 'draft' || design?.status === 'changes_requested'
+
+  // 🌟 Require designId and load that design
   useEffect(() => {
     let mounted = true
     ;(async () => {
       try {
         setBusy(true)
-        // Check if a draft already exists for this product
-        const existing = await fetch(`/api/designs?productId=${slug}`)
-        if (existing.ok) {
-          const data = await existing.json()
-          if (data.design) {
-            if (mounted) {
-              setDesign(data.design)
-              // preload any existing artwork previews
-              const existingUploads: Record<string, string> = {}
-              data.design.placements?.forEach((p: any) => {
-                existingUploads[p.areaId] = p.url
-              })
-              setUploads(existingUploads)
-              setBusy(false)
-              return
-            }
-          }
+
+        // no designId → redirect back to product page
+        if (!designId) {
+          router.replace(`/products/${slug}`)
+          return
         }
 
-        // 🌟 STEP 2: No design found → create a new draft
-        const res = await fetch('/api/designs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            productId: slug,
-            variantSku: `${slug}-default`,
-            basePrice,
-          }),
+        // load the design by ID
+        const res = await fetch(`/api/designs/${designId}`, {
+          cache: 'no-store',
         })
         if (!res.ok) throw new Error(await res.text())
         const data = await res.json()
-        if (mounted) setDesign(data.design)
+
+        if (mounted) {
+          setDesign(data.design)
+          const existingUploads: Record<string, string> = {}
+          data.design.placements?.forEach((p: any) => {
+            existingUploads[p.areaId] = p.url
+          })
+          setUploads(existingUploads)
+        }
       } catch (err) {
-        console.error('Error creating or hydrating design:', err)
-        alert('Failed to load design. Please refresh.')
+        console.error('Failed to load design by id:', err)
+        alert('Failed to load this design. Redirecting to product.')
+        router.replace(`/products/${slug}`)
       } finally {
         setBusy(false)
       }
@@ -94,10 +89,9 @@ export default function DesignPage({
     return () => {
       mounted = false
     }
-  }, [slug, basePrice])
+  }, [designId, slug, router])
 
-  // 🌟 Upload handler
-  // app/design/[slug]/page.tsx — replace your current handleUploaded with this one
+  // 🌟 Upload handler — one per side logic preserved
   async function handleUploaded(r: {
     secure_url: string
     public_id: string
@@ -108,30 +102,26 @@ export default function DesignPage({
       alert('Design not ready yet. Please wait a moment.')
       return
     }
-
     try {
       setBusy(true)
-
-      // 1) Optimistic UI: purge any other upload on the SAME SIDE,
-      //    then set the new one for the active area.
       const side = activeArea.side
+
+      // optimistic one-per-side cleanup
       setUploads((u) => {
         const next = { ...u }
-        // remove any existing upload from the same side
         for (const area of PRINT_AREAS) {
           if (area.side === side) delete next[area.id]
         }
-        // set the new upload for the active area
         next[activeArea.id] = r.secure_url
         return next
       })
 
-      // 2) Persist on server — this REPLACES the placement for this side (upsert)
+      // persist on server
       const res = await fetch(`/api/designs/${design.id}/placements`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          side, // ✅ crucial for composite key (designId, side)
+          side,
           areaId: activeArea.id,
           assetId: r.public_id,
           url: r.secure_url,
@@ -142,13 +132,14 @@ export default function DesignPage({
       if (!res.ok) throw new Error(await res.text())
       const data = await res.json()
 
-      // 3) Authoritative re-sync: rebuild uploads map from server placements
+      // rebuild uploads from server placements
       const serverUploads: Record<string, string> = {}
       for (const p of data.design.placements ?? []) {
         if (p.url && p.areaId) serverUploads[p.areaId] = p.url
       }
       setUploads(serverUploads)
       setDesign(data.design)
+      toast('Artwork saved')
     } catch (err) {
       console.error(err)
       alert('Failed to save placement.')
@@ -165,12 +156,6 @@ export default function DesignPage({
       return next
     })
   }
-
-  const areaById = useMemo(() => {
-    const m = new Map<string, PrintArea>()
-    for (const a of PRINT_AREAS) m.set(a.id, a)
-    return m
-  }, [])
 
   const hasArt = !!uploads[activeArea.id]
   const effectiveBase = design?.pricingBase ?? basePrice
@@ -246,7 +231,7 @@ export default function DesignPage({
           uploads={uploads}
         />
 
-        {/* ✅ Single submit/resubmit button */}
+        {/* ✅ Submit or Resubmit button */}
         <button
           className='mt-4 w-full h-11 rounded-lg bg-black text-white disabled:opacity-60'
           disabled={!design || busy || design.status === 'submitted'}
@@ -263,11 +248,7 @@ export default function DesignPage({
                 return
               }
               setDesign(data.design)
-              toast(
-                design.status === 'changes_requested'
-                  ? 'Resubmitted for review'
-                  : 'Submitted for approval'
-              )
+              router.push('/dashboard/designs?submitted=1') // redirect
             } catch (e) {
               console.error(e)
               alert('Submit failed')
@@ -286,7 +267,6 @@ export default function DesignPage({
         </button>
       </aside>
 
-      {/* toasts */}
       {Toast}
     </div>
   )
