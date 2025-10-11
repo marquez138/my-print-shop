@@ -82,13 +82,19 @@ export async function DELETE(
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     if (design.userId !== userId)
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    if (design.status !== 'draft')
+
+    // ✅ Business rule:
+    // Users can delete: draft, changes_requested, submitted
+    // Users cannot delete: approved, ordered  (adjust to taste)
+    const deletable = ['draft', 'changes_requested', 'submitted', 'approved']
+    if (!deletable.includes(design.status)) {
       return NextResponse.json(
-        { error: 'Only drafts can be deleted' },
+        { error: `Design in status "${design.status}" cannot be deleted.` },
         { status: 400 }
       )
+    }
 
-    // If your relations are NOT cascading, uncomment these explicit deletes:
+    // If relations aren’t cascading in schema, uncomment:
     // await prisma.designPlacement.deleteMany({ where: { designId: id } })
     // await prisma.designComment.deleteMany({ where: { designId: id } })
 

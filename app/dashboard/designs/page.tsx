@@ -3,7 +3,8 @@ import Image from 'next/image'
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/db'
 import DesignStatusBadge from '../DesignStatusBadge'
-import DeleteDraftButton from '@/components/dashboard/DeleteDraftButton'
+import DeleteDraftButton from '@/components/dashboard/DeleteDesignButton'
+import DeleteDesignButton from '@/components/dashboard/DeleteDesignButton'
 
 function pickThumb(d: {
   placements: { areaId: string; url: string | null }[]
@@ -116,7 +117,8 @@ export default async function DesignsDashboardPage() {
                   {isEditable ? 'Continue design' : 'View'}
                 </Link>
 
-                {isDraft && <DeleteDraftButton id={d.id} />}
+                {/* Always render delete; API will enforce what’s allowed */}
+                <DeleteDesignButton id={d.id} />
 
                 {!isEditable && (
                   <span className='text-sm text-gray-600'>
