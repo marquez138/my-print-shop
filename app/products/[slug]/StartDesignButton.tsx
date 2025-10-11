@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth, useClerk } from '@clerk/nextjs'
+import { useAuth } from '@clerk/nextjs'
 
 export default function StartDesignButton({
   slug,
@@ -17,20 +17,25 @@ export default function StartDesignButton({
 }) {
   const router = useRouter()
   const { isSignedIn } = useAuth()
-  const { redirectToSignIn } = useClerk()
   const [busy, setBusy] = useState(false)
+
+  // Explicit Clerk sign-in path with redirect back to product page
+  function goToSignIn() {
+    router.push(`/sign-in?redirect_url=/products/${slug}`)
+  }
 
   async function start() {
     if (busy) return
     try {
       setBusy(true)
 
+      // 1) If not signed in, go to sign in FIRST — do NOT call the API yet.
       if (!isSignedIn) {
-        // ✅ use redirectUrl (or afterSignInUrl) instead of returnBackUrl
-        await redirectToSignIn({ redirectUrl: `/products/${slug}` })
+        goToSignIn()
         return
       }
 
+      // 2) Create a brand-new draft
       const res = await fetch('/api/designs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -41,20 +46,23 @@ export default function StartDesignButton({
         }),
       })
 
+      // 3) If session expired between click and request, send to sign in
       if (res.status === 401) {
-        await redirectToSignIn({ redirectUrl: `/products/${slug}` })
+        goToSignIn()
         return
       }
 
       if (!res.ok) {
         const text = await res.text()
+        console.error('[POST /api/designs] failed:', text)
         throw new Error(text)
       }
 
       const data = await res.json()
       const designId: string | undefined = data?.design?.id
-      if (!designId) throw new Error('Missing designId from API')
+      if (!designId) throw new Error('Missing designId in API response')
 
+      // 4) Navigate to clean design page with designId
       router.push(`/design/${slug}?designId=${designId}`)
     } catch (e) {
       console.error(e)
