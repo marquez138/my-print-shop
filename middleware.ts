@@ -8,6 +8,7 @@ const protectedRoutes = createRouteMatcher([
   '/api/checkout(.*)',
   '/admin(.*)',
   '/api/admin(.*)',
+  '/dashboard(.*)', // ← add this
 ])
 
 export default clerkMiddleware(async (auth, req) => {
