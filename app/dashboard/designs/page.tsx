@@ -2,7 +2,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/db'
-import DesignStatusBadge from '@/components/dashboard/DesignStatusBadge'
+import DesignStatusBadge from '../DesignStatusBadge'
 
 function pickThumb(d: {
   placements: { areaId: string; url: string | null }[]
