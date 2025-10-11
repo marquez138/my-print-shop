@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { use, useEffect, useMemo, useState } from 'react'
 import { PRINT_AREAS, type PrintArea } from '@/config/print-areas'
 import DesignCanvas from '@/components/Design/DesignCanvas'
 import PrintAreaList from '@/components/Design/PrintAreaList'
@@ -97,6 +97,7 @@ export default function DesignPage({
   }, [slug, basePrice])
 
   // 🌟 Upload handler
+  // app/design/[slug]/page.tsx — replace your current handleUploaded with this one
   async function handleUploaded(r: {
     secure_url: string
     public_id: string
@@ -107,15 +108,30 @@ export default function DesignPage({
       alert('Design not ready yet. Please wait a moment.')
       return
     }
+
     try {
       setBusy(true)
-      setUploads((u) => ({ ...u, [activeArea.id]: r.secure_url }))
+
+      // 1) Optimistic UI: purge any other upload on the SAME SIDE,
+      //    then set the new one for the active area.
+      const side = activeArea.side
+      setUploads((u) => {
+        const next = { ...u }
+        // remove any existing upload from the same side
+        for (const area of PRINT_AREAS) {
+          if (area.side === side) delete next[area.id]
+        }
+        // set the new upload for the active area
+        next[activeArea.id] = r.secure_url
+        return next
+      })
+
+      // 2) Persist on server — this REPLACES the placement for this side (upsert)
       const res = await fetch(`/api/designs/${design.id}/placements`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          // ✅ include side for the composite unique key (designId_side)
-          side: activeArea.side, // <— ✅ add this
+          side, // ✅ crucial for composite key (designId, side)
           areaId: activeArea.id,
           assetId: r.public_id,
           url: r.secure_url,
@@ -125,8 +141,14 @@ export default function DesignPage({
       })
       if (!res.ok) throw new Error(await res.text())
       const data = await res.json()
+
+      // 3) Authoritative re-sync: rebuild uploads map from server placements
+      const serverUploads: Record<string, string> = {}
+      for (const p of data.design.placements ?? []) {
+        if (p.url && p.areaId) serverUploads[p.areaId] = p.url
+      }
+      setUploads(serverUploads)
       setDesign(data.design)
-      toast('Artwork saved')
     } catch (err) {
       console.error(err)
       alert('Failed to save placement.')
@@ -143,6 +165,12 @@ export default function DesignPage({
       return next
     })
   }
+
+  const areaById = useMemo(() => {
+    const m = new Map<string, PrintArea>()
+    for (const a of PRINT_AREAS) m.set(a.id, a)
+    return m
+  }, [])
 
   const hasArt = !!uploads[activeArea.id]
   const effectiveBase = design?.pricingBase ?? basePrice
