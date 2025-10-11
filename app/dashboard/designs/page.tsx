@@ -3,6 +3,7 @@ import Image from 'next/image'
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from '@/lib/db'
 import DesignStatusBadge from '../DesignStatusBadge'
+import DeleteDraftButton from '@/components/dashboard/DeleteDraftButton'
 
 function pickThumb(d: {
   placements: { areaId: string; url: string | null }[]
@@ -64,8 +65,10 @@ export default async function DesignsDashboardPage() {
       {designs.map((d) => {
         const thumb = pickThumb(d)
         const href = `/design/${d.productId}?designId=${d.id}`
+
         const isEditable =
           d.status === 'draft' || d.status === 'changes_requested'
+        const isDraft = d.status === 'draft'
 
         return (
           <div
@@ -100,18 +103,27 @@ export default async function DesignsDashboardPage() {
               </div>
             </div>
 
-            <div className='flex items-center gap-2'>
-              <Link
-                href={href}
-                className='inline-flex h-9 items-center rounded border px-3 text-sm'
-              >
-                {isEditable ? 'Continue design' : 'View'}
-              </Link>
-              {isEditable ? null : (
-                <span className='text-sm text-gray-600'>
-                  ${(d.pricingTotal / 100).toFixed(2)}
-                </span>
-              )}
+            <div
+              key={d.id}
+              className='flex items-center gap-4 rounded-lg border p-4'
+            >
+              {/* ...thumb + meta... */}
+              <div className='flex items-center gap-2'>
+                <Link
+                  href={href}
+                  className='inline-flex h-9 items-center rounded border px-3 text-sm'
+                >
+                  {isEditable ? 'Continue design' : 'View'}
+                </Link>
+
+                {isDraft && <DeleteDraftButton id={d.id} />}
+
+                {!isEditable && (
+                  <span className='text-sm text-gray-600'>
+                    ${(d.pricingTotal / 100).toFixed(2)}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         )

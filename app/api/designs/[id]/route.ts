@@ -62,3 +62,43 @@ export async function GET(
     )
   }
 }
+
+export async function DELETE(
+  _req: Request,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  const { userId } = await auth()
+  if (!userId)
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await ctx.params
+
+  try {
+    const design = await prisma.design.findUnique({
+      where: { id },
+      select: { id: true, userId: true, status: true },
+    })
+    if (!design)
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (design.userId !== userId)
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (design.status !== 'draft')
+      return NextResponse.json(
+        { error: 'Only drafts can be deleted' },
+        { status: 400 }
+      )
+
+    // If your relations are NOT cascading, uncomment these explicit deletes:
+    // await prisma.designPlacement.deleteMany({ where: { designId: id } })
+    // await prisma.designComment.deleteMany({ where: { designId: id } })
+
+    await prisma.design.delete({ where: { id } })
+    return NextResponse.json({ ok: true })
+  } catch (err: any) {
+    console.error('[DELETE /api/designs/:id]', err)
+    return NextResponse.json(
+      { error: 'Server error', detail: err.message },
+      { status: 500 }
+    )
+  }
+}
