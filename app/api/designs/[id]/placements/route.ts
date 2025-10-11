@@ -16,7 +16,7 @@ export async function POST(
   try {
     const body = await req.json()
     const {
-      side, // <-- REQUIRED now: 'front' | 'back' | 'sleeve'
+      side, // REQUIRED: 'front' | 'back' | 'sleeve'
       areaId, // id from PRINT_AREAS
       assetId,
       url,
@@ -33,14 +33,13 @@ export async function POST(
       dpi?: number
     }
 
-    // Validate side & area coherence
+    // Validate area matches side
     const area = PRINT_AREAS.find((a) => a.id === areaId)
-    if (!area) {
+    if (!area)
       return NextResponse.json(
         { error: `Unknown areaId "${areaId}"` },
         { status: 400 }
       )
-    }
     if (area.side !== side) {
       return NextResponse.json(
         {
@@ -50,19 +49,16 @@ export async function POST(
       )
     }
 
-    // Fetch design & ownership
+    // Ownership + status checks
     const design = await prisma.design.findUnique({
       where: { id: designId },
       select: { id: true, userId: true, status: true, pricingBase: true },
     })
     if (!design)
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
     if (design.userId && design.userId !== userId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
-
-    // Only editable in these states
     if (!['draft', 'changes_requested'].includes(design.status)) {
       return NextResponse.json(
         { error: `Design is not editable in status "${design.status}"` },
@@ -70,13 +66,11 @@ export async function POST(
       )
     }
 
-    // ✅ One placement per side — use the correct composite key name
+    // ✅ One-per-side: upsert by composite key
     const placement = await prisma.designPlacement.upsert({
-      where: {
-        designId_side: { designId, side }, // <-- FIX: use the schema’s @@unique name
-      },
+      where: { designId_side: { designId, side } }, // <-- key point
       update: {
-        areaId, // allow moving to a different area on the same side
+        areaId,
         assetId,
         url,
         widthPx,
@@ -85,6 +79,7 @@ export async function POST(
         x: 0,
         y: 0,
         scale: 1,
+        rotation: 0,
       },
       create: {
         designId,
@@ -98,10 +93,11 @@ export async function POST(
         x: 0,
         y: 0,
         scale: 1,
+        rotation: 0,
       },
     })
 
-    // Recompute fees from all placed areas
+    // Recompute totals from all placements
     const all = await prisma.designPlacement.findMany({
       where: { designId },
       select: { areaId: true, url: true },
