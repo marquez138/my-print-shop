@@ -55,10 +55,10 @@ async function seedProduct() {
       ],
     },
     {
-      color: 'Ash',
+      color: 'Green',
       images: [
-        { url: '/media/ash-front.jpg', tag: 'front', alt: 'Ash Front' },
-        { url: '/media/ash-back.jpg', tag: 'back', alt: 'Ash Back' },
+        { url: '/media/ash-front.jpg', tag: 'front', alt: 'Green Front' },
+        { url: '/media/ash-back.jpg', tag: 'back', alt: 'Green Back' },
       ],
     },
   ] as const
