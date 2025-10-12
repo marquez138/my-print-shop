@@ -1,8 +1,9 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { use, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { PRINT_AREAS, type PrintArea } from '@/config/print-areas'
+import { resolveHex } from '@/config/colors' // ← NEW
 import DesignCanvas from '@/components/Design/DesignCanvas'
 import PrintAreaList from '@/components/Design/PrintAreaList'
 import PriceSummary from '@/components/Design/PriceSummary'
@@ -31,15 +32,18 @@ export default function DesignPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>
-  searchParams: Promise<{ base?: string; designId?: string }>
+  searchParams: Promise<{ base?: string; designId?: string; color?: string }> // ← color from PDP
 }) {
   const router = useRouter()
   const { slug } = use(params)
-  const resolvedSearch = use(searchParams)
-  const designId = resolvedSearch?.designId
-  const basePrice = Number.isFinite(Number(resolvedSearch?.base))
-    ? Number(resolvedSearch!.base)
-    : 2500
+  const q = use(searchParams)
+
+  const designId = q?.designId
+  const basePrice = Number.isFinite(Number(q?.base)) ? Number(q!.base) : 2500
+
+  // NEW: garment color (default white if missing/unknown)
+  const selectedColorId = (q?.color ?? 'white').toLowerCase()
+  const garmentHex = resolveHex(selectedColorId, '#ffffff')
 
   const [activeArea, setActiveArea] = useState<PrintArea>(PRINT_AREAS[0])
   const [uploads, setUploads] = useState<Record<string, string>>({})
@@ -57,13 +61,11 @@ export default function DesignPage({
       try {
         setBusy(true)
 
-        // no designId → redirect back to product page
         if (!designId) {
           router.replace(`/products/${slug}`)
           return
         }
 
-        // load the design by ID
         const res = await fetch(`/api/designs/${designId}`, {
           cache: 'no-store',
         })
@@ -91,7 +93,7 @@ export default function DesignPage({
     }
   }, [designId, slug, router])
 
-  // 🌟 Upload handler — one per side logic preserved
+  // 🌟 Upload handler — one-per-side logic preserved
   async function handleUploaded(r: {
     secure_url: string
     public_id: string
@@ -214,12 +216,23 @@ export default function DesignPage({
         )}
       </aside>
 
-      {/* Center canvas */}
+      {/* Center canvas with garment color */}
       <section className='lg:col-span-6'>
-        <DesignCanvas area={activeArea} artUrl={uploads[activeArea.id]} />
+        <DesignCanvas
+          area={activeArea}
+          artUrl={uploads[activeArea.id]}
+          baseColorHex={garmentHex} // ← color layer
+        />
         <div className='mt-3 text-sm text-gray-600'>
           Showing side:{' '}
           <span className='font-medium capitalize'>{activeArea.side}</span>
+          <span className='ml-3 inline-flex items-center gap-2'>
+            <span
+              className='inline-block h-3 w-3 rounded-full border'
+              style={{ backgroundColor: garmentHex }}
+            />
+            <span className='capitalize'>{selectedColorId}</span>
+          </span>
         </div>
       </section>
 
@@ -248,7 +261,7 @@ export default function DesignPage({
                 return
               }
               setDesign(data.design)
-              router.push('/dashboard/designs?submitted=1') // redirect
+              router.push('/dashboard/designs?submitted=1') // redirect after submit
             } catch (e) {
               console.error(e)
               alert('Submit failed')

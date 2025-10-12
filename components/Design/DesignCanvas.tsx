@@ -1,82 +1,66 @@
-// components/Design/DesignCanvas.tsx
+'use client'
+
 import Image from 'next/image'
-
-type Side = 'front' | 'back' | 'sleeve'
-
-type PrintAreaLike = {
-  id: string
-  label: string
-  side: Side
-  // normalized safe-area box inside the canvas (0..1)
-  box: { x: number; y: number; w: number; h: number }
-  // optional mock background image for this side
-  mock?: { src: string; alt?: string }
-}
+import type { PrintArea } from '@/config/print-areas'
 
 export default function DesignCanvas({
   area,
   artUrl,
-  // normalized placement; default to “top” alignment
-  x = 0,
-  y = 0,
-  scale = 1,
+  baseColorHex = '#ffffff', // ← NEW
 }: {
-  area: PrintAreaLike
-  artUrl?: string | null
-  x?: number
-  y?: number
-  scale?: number
+  area: PrintArea
+  artUrl?: string
+  baseColorHex?: string
 }) {
-  const box = area.box
-
   return (
-    <div className='relative mx-auto aspect-[4/5] w-full max-w-[700px] overflow-hidden rounded-xl bg-white'>
-      {/* Base mockup for the side */}
-      {area.mock ? (
-        <Image
-          src={area.mock.src}
-          alt={area.mock.alt || `${area.side} mockup`}
-          fill
-          className='object-cover'
-          priority
-        />
-      ) : (
-        <div className='absolute inset-0 bg-gray-50' />
-      )}
-
-      {/* Safe-area outline */}
+    <div className='relative w-full aspect-[4/5] rounded-xl overflow-hidden border bg-gray-50'>
+      {/* 1) Garment color layer (sits at the very back) */}
       <div
-        className='absolute border-2 border-emerald-400/70'
-        style={{
-          left: `${box.x * 100}%`,
-          top: `${box.y * 100}%`,
-          width: `${box.w * 100}%`,
-          height: `${box.h * 100}%`,
-        }}
-        title={`${area.label} safe area`}
+        className='absolute inset-0'
+        style={{ backgroundColor: baseColorHex }}
       />
 
-      {/* Artwork overlay within safe-area using normalized coords */}
-      {artUrl ? (
+      {/* 2) Transparent tee mockup on top of the color layer */}
+      {!!area.mock && (
+        <Image
+          src={area.mock.src}
+          alt={area.mock.alt ?? `${area.side} mockup`}
+          fill
+          priority
+          sizes='(max-width: 1024px) 100vw, 50vw'
+          className='object-contain pointer-events-none select-none'
+        />
+      )}
+
+      {/* 3) Safe area dashed guide */}
+      <div
+        className='absolute border-2 border-dashed border-white/70'
+        style={{
+          left: `${area.box.x * 100}%`,
+          top: `${area.box.y * 100}%`,
+          width: `${area.box.w * 100}%`,
+          height: `${area.box.h * 100}%`,
+        }}
+      />
+
+      {/* 4) Artwork preview, auto-fit inside safe area (cover) */}
+      {artUrl && (
         <div
-          className='absolute'
+          className='absolute overflow-hidden'
           style={{
-            left: `${(box.x + box.w * x) * 100}%`,
-            top: `${(box.y + box.h * y) * 100}%`,
-            width: `${box.w * scale * 100}%`,
+            left: `${area.box.x * 100}%`,
+            top: `${area.box.y * 100}%`,
+            width: `${area.box.w * 100}%`,
+            height: `${area.box.h * 100}%`,
           }}
         >
           <Image
             src={artUrl}
             alt='Artwork'
-            width={1200}
-            height={1200}
-            className='h-auto w-full object-contain drop-shadow'
+            fill
+            sizes='(max-width: 1024px) 100vw, 50vw'
+            className='object-contain'
           />
-        </div>
-      ) : (
-        <div className='absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded bg-white/80 px-3 py-1 text-xs text-gray-600'>
-          No artwork in “{area.label}”
         </div>
       )}
     </div>
