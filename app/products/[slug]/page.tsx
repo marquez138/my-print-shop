@@ -1,7 +1,6 @@
 // app/products/[slug]/page.tsx
 export const runtime = 'nodejs'
 
-import { use } from 'react'
 import { prisma } from '@/lib/db'
 import ProductView from './ProductView'
 
@@ -10,7 +9,8 @@ export default async function ProductPage({
 }: {
   params: Promise<{ slug: string }>
 }) {
-  const { slug } = use(params)
+  // ✅ Unwrap the promise with await (not React.use)
+  const { slug } = await params
 
   try {
     const product = await prisma.product.findUnique({
@@ -42,25 +42,23 @@ export default async function ProductPage({
       return (
         <div className='py-24 text-center'>
           <h1 className='text-xl font-semibold'>Product not found</h1>
-          <p className='text-sm text-gray-500 mt-2'>Slug: {slug}</p>
+          <p className='text-sm text-gray-500'>Slug: {slug}</p>
         </div>
       )
     }
 
     return <ProductView product={product} />
   } catch (err: any) {
-    // This shows up in Vercel → Functions logs
-    console.error('[ProductPage] Failed to load product', {
+    // Helpful server log for Vercel/Node
+    console.error('[ProductPage error]', {
       slug,
-      message: err?.message,
+      error: err?.message,
       stack: err?.stack,
     })
     return (
       <div className='py-24 text-center'>
-        <h1 className='text-xl font-semibold'>Something went wrong</h1>
-        <p className='text-sm text-gray-500 mt-2'>
-          We couldn’t load this product.
-        </p>
+        <h1 className='text-xl font-semibold'>Failed to load product</h1>
+        <p className='text-sm text-gray-500'>Please try again in a moment.</p>
       </div>
     )
   }
