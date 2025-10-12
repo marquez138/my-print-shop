@@ -4,21 +4,15 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { SignedIn, SignedOut, SignInButton, useAuth } from '@clerk/nextjs'
 
-/**
- * Modal sign-in flow with auto-continue:
- * - If signed out, we set a localStorage flag and open Clerk modal.
- * - After sign-in (modal closes), effect sees the flag and creates the draft.
- * - If already signed in, we create the draft immediately.
- */
 export default function StartDesignButton({
   slug,
   basePrice,
-  variantSku,
+  color,                 // ⬅ receives selected color (e.g., "black")
   className = '',
 }: {
   slug: string
   basePrice: number // cents
-  variantSku?: string
+  color?: string     // optional, but recommended
   className?: string
 }) {
   const router = useRouter()
@@ -30,55 +24,51 @@ export default function StartDesignButton({
   const createDraft = useCallback(async () => {
     try {
       setBusy(true)
+      const variantSku = color ? `${slug}-${color}` : `${slug}-default`
       const res = await fetch('/api/designs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           productId: slug,
-          variantSku: variantSku ?? `${slug}-default`,
+          variantSku,
+          color,       // ⬅ persist for admin visibility (optional in your Design model)
           basePrice,
         }),
       })
-
-      if (!res.ok) {
-        const text = await res.text()
-        console.error('[POST /api/designs] failed:', text)
-        throw new Error(text)
-      }
-
+      if (!res.ok) throw new Error(await res.text())
       const data = await res.json()
       const designId: string | undefined = data?.design?.id
-      if (!designId) throw new Error('Missing designId in API response')
+      if (!designId) throw new Error('Missing designId in response')
 
-      router.push(`/design/${slug}?designId=${designId}`)
+      // Carry color + base to design page
+      const qs = new URLSearchParams()
+      qs.set('base', String(basePrice))
+      if (color) qs.set('color', color)
+      qs.set('designId', designId) // optional; design page also searches by productId+draft
+
+      router.push(`/design/${slug}?${qs.toString()}`)
     } catch (e) {
       console.error(e)
       alert('Unable to start a design right now.')
     } finally {
       setBusy(false)
-      try {
-        localStorage.removeItem(FLAG_KEY)
-      } catch {}
+      try { localStorage.removeItem(FLAG_KEY) } catch {}
     }
-  }, [slug, variantSku, basePrice, router])
+  }, [slug, basePrice, color, router])
 
-  // If user just signed in via modal and we left a "pending" flag, auto-continue
   useEffect(() => {
     if (!isSignedIn) return
     try {
       const pending = localStorage.getItem(FLAG_KEY)
-      if (pending === '1') {
-        createDraft()
-      }
+      if (pending === '1') createDraft()
     } catch {}
   }, [isSignedIn, createDraft])
 
   return (
     <>
-      {/* Signed-in: just create the draft */}
       <SignedIn>
         <button
-          type='button'
+          type="button"
           onClick={createDraft}
           disabled={busy}
           className={`h-11 rounded-lg bg-black text-white px-5 disabled:opacity-60 ${className}`}
@@ -87,15 +77,12 @@ export default function StartDesignButton({
         </button>
       </SignedIn>
 
-      {/* Signed-out: open Clerk modal; set a flag so we auto-continue after sign-in */}
       <SignedOut>
-        <SignInButton mode='modal'>
+        <SignInButton mode="modal">
           <button
-            type='button'
+            type="button"
             onClick={() => {
-              try {
-                localStorage.setItem(FLAG_KEY, '1')
-              } catch {}
+              try { localStorage.setItem(FLAG_KEY, '1') } catch {}
             }}
             disabled={busy}
             className={`h-11 rounded-lg bg-black text-white px-5 disabled:opacity-60 ${className}`}
