@@ -65,35 +65,25 @@ enum PrintSide {
 }
 
 model Design {
-  id           String   @id @default(cuid())
+  id           String            @id @default(cuid())
   userId       String?
   anonymousId  String?
-
   productId    String
   variantSku   String
-
-  // 👇 add these (optional)
-  color        String?
-  size         String?
-
-  status       String   @default("draft")
-
+  color        String? // ← keep if you want it
+  status       String            @default("draft")
   pricingBase  Int
   pricingFees  Int
   pricingTotal Int
-
   previewFront String?
   previewBack  String?
   previewLeft  String?
   previewRight String?
-
   printSpec    Json
-
   placements   DesignPlacement[]
   comments     DesignComment[]
-
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 }
 
 model DesignComment {
@@ -141,36 +131,32 @@ model DesignPlacement {
 }
 
 model Product {
-  id          String           @id @default(cuid())
-  slug        String           @unique
-  name        String
-  basePrice   Int
-  brand       String?
-  description String?
-  variants    ProductVariant[]
-  images      ProductImage[]
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-}
-
-model ProductVariant {
-  id         String  @id @default(cuid())
-  productId  String
-  sku        String  @unique
-  color      String?
-  size       String?
-  price      Int
-  offerPrice Int?
-  product    Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id        String         @id @default(cuid())
+  slug      String         @unique
+  name      String
+  basePrice Int
+  images    ProductImage[] // <-- exact relation name
+  variants  Variant[] // <-- exact relation name
 }
 
 model ProductImage {
   id        String  @id @default(cuid())
+  product   Product @relation(fields: [productId], references: [id])
   productId String
   url       String
   alt       String?
   tag       String?
   color     String?
   position  Int     @default(0)
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Variant {
+  id         String  @id @default(cuid())
+  product    Product @relation(fields: [productId], references: [id])
+  productId  String
+  sku        String  @unique
+  color      String?
+  size       String?
+  price      Int?
+  offerPrice Int?
 }

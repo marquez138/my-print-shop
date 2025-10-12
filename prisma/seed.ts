@@ -1,27 +1,27 @@
+// prisma/seed.ts
 import { prisma } from '@/lib/db'
 
 async function seedProduct() {
   console.log('🌱 Seeding Unisex Jersey Tee...')
   const slug = 'unisex-jersey-tee'
 
-  // Wipe if exists
+  // Clean slate for this product
   await prisma.product.deleteMany({ where: { slug } })
 
-  // 1️⃣ Create base product
+  // 1) Create base product
   const product = await prisma.product.create({
     data: {
       slug,
       name: 'Unisex Jersey Tee',
-      brand: 'Bella+Canvas',
-      description:
-        'Crafted from premium ring-spun cotton with a classic fit and soft-hand screen print.',
+      // brand/description not in your current Product model; add to schema later if you want
       basePrice: 2800, // cents
     },
   })
 
-  // 2️⃣ Create variants (color x size)
-  const colors = ['White', 'Black', 'Ash']
-  const sizes = ['S', 'M', 'L']
+  // 2) Create variants (color x size)
+  const colors = ['White', 'Black', 'Ash'] as const
+  const sizes = ['S', 'M', 'L'] as const
+
   const variantData = []
   for (const c of colors) {
     for (const s of sizes) {
@@ -35,16 +35,16 @@ async function seedProduct() {
       })
     }
   }
-  await prisma.productVariant.createMany({ data: variantData })
+  // ✅ Use the correct model name from your schema: Variant
+  await prisma.variant.createMany({ data: variantData })
 
-  // 3️⃣ Create images for each color
+  // 3) Create images for each color (keep colors consistent with variants)
   const imageSets = [
     {
       color: 'Black',
       images: [
         { url: '/media/black-front.jpg', tag: 'front', alt: 'Black Front' },
         { url: '/media/black-back.jpg', tag: 'back', alt: 'Black Back' },
-        // { url: '/media/black-detail.jpg', tag: 'detail', alt: 'Black Detail' },
       ],
     },
     {
@@ -55,13 +55,13 @@ async function seedProduct() {
       ],
     },
     {
-      color: 'Green',
+      color: 'Ash',
       images: [
-        { url: '/media/green-front.jpg', tag: 'front', alt: 'Green Front' },
-        { url: '/media/green-back.jpg', tag: 'back', alt: 'Green Back' },
+        { url: '/media/ash-front.jpg', tag: 'front', alt: 'Ash Front' },
+        { url: '/media/ash-back.jpg', tag: 'back', alt: 'Ash Back' },
       ],
     },
-  ]
+  ] as const
 
   let pos = 0
   for (const set of imageSets) {
@@ -69,15 +69,19 @@ async function seedProduct() {
       await prisma.productImage.create({
         data: {
           productId: product.id,
-          ...img,
-          color: set.color,
+          url: img.url,
+          alt: img.alt,
+          tag: img.tag,
+          color: set.color, // allows filtering images by selected color
           position: pos++,
         },
       })
     }
   }
 
-  console.log(`✅ Created ${product.name} with variants & images.`)
+  console.log(
+    `✅ Created ${product.name} with ${variantData.length} variants & ${pos} images.`
+  )
 }
 
 async function main() {
