@@ -7,12 +7,12 @@ import { SignedIn, SignedOut, SignInButton, useAuth } from '@clerk/nextjs'
 export default function StartDesignButton({
   slug,
   basePrice,
-  color,                 // ⬅ receives selected color (e.g., "black")
+  color, // ⬅ receives selected color (e.g., "black")
   className = '',
 }: {
   slug: string
   basePrice: number // cents
-  color?: string     // optional, but recommended
+  color?: string // optional, but recommended
   className?: string
 }) {
   const router = useRouter()
@@ -31,7 +31,7 @@ export default function StartDesignButton({
         body: JSON.stringify({
           productId: slug,
           variantSku,
-          color,       // ⬅ persist for admin visibility (optional in your Design model)
+          color, // ⬅ persist for admin visibility (optional in your Design model)
           basePrice,
         }),
       })
@@ -52,7 +52,9 @@ export default function StartDesignButton({
       alert('Unable to start a design right now.')
     } finally {
       setBusy(false)
-      try { localStorage.removeItem(FLAG_KEY) } catch {}
+      try {
+        localStorage.removeItem(FLAG_KEY)
+      } catch {}
     }
   }, [slug, basePrice, color, router])
 
@@ -68,7 +70,7 @@ export default function StartDesignButton({
     <>
       <SignedIn>
         <button
-          type="button"
+          type='button'
           onClick={createDraft}
           disabled={busy}
           className={`h-11 rounded-lg bg-black text-white px-5 disabled:opacity-60 ${className}`}
@@ -78,11 +80,13 @@ export default function StartDesignButton({
       </SignedIn>
 
       <SignedOut>
-        <SignInButton mode="modal">
+        <SignInButton mode='modal'>
           <button
-            type="button"
+            type='button'
             onClick={() => {
-              try { localStorage.setItem(FLAG_KEY, '1') } catch {}
+              try {
+                localStorage.setItem(FLAG_KEY, '1')
+              } catch {}
             }}
             disabled={busy}
             className={`h-11 rounded-lg bg-black text-white px-5 disabled:opacity-60 ${className}`}

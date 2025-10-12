@@ -65,14 +65,18 @@ enum PrintSide {
 }
 
 model Design {
-  id          String  @id @default(cuid())
-  userId      String?
-  anonymousId String?
+  id           String   @id @default(cuid())
+  userId       String?
+  anonymousId  String?
 
-  productId  String
-  variantSku String
+  productId    String
+  variantSku   String
 
-  status String @default("draft") // draft | approved | ordered
+  // 👇 add these (optional)
+  color        String?
+  size         String?
+
+  status       String   @default("draft")
 
   pricingBase  Int
   pricingFees  Int
@@ -83,15 +87,13 @@ model Design {
   previewLeft  String?
   previewRight String?
 
-  printSpec Json
+  printSpec    Json
 
-  placements DesignPlacement[]
+  placements   DesignPlacement[]
+  comments     DesignComment[]
 
-  // 👇 add this back-relation so Prisma can link comments → design
-  comments DesignComment[] // back-relation to DesignComment.design
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model DesignComment {
