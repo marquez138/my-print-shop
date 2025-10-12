@@ -64,34 +64,39 @@ enum PrintSide {
   sleeve
 }
 
-model Design {
-  id          String  @id @default(cuid())
+ model Design {
+  id          String   @id @default(cuid())
   userId      String?
   anonymousId String?
 
-  productId  String
-  variantSku String
+  productId   String
+  variantSku  String        // e.g. "unisex-tee-black-xl"
+  color       String?       // 👈 store the selected color id (e.g. "black")
 
-  status String @default("draft") // draft | approved | ordered
+  status      String   @default("draft") // draft | submitted | changes_requested | approved | ordered
 
+  // pricing in cents
   pricingBase  Int
   pricingFees  Int
   pricingTotal Int
 
+  // optional per-side preview URLs
   previewFront String?
   previewBack  String?
   previewLeft  String?
   previewRight String?
 
-  printSpec Json
+  // frozen spec used by production (coords, size, DPI, color mode, etc.)
+  printSpec    Json
 
-  placements DesignPlacement[]
+  placements   DesignPlacement[]
+  comments     DesignComment[]  // back-relation to DesignComment.design
 
-  // 👇 add this back-relation so Prisma can link comments → design
-  comments   DesignComment[]  // back-relation to DesignComment.design
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  @@index([productId, color])
+  @@index([status])
 }
 
 model DesignComment {
