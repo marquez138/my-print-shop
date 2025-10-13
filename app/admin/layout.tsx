@@ -1,15 +1,22 @@
-// app/admin/layout.tsx
-import { requireAdmin } from '@/lib/authz'
+// app/admin/layout.tsx (or /page.tsx)
+import { auth } from '@clerk/nextjs/server'
+import { prisma } from '@/lib/db'
+import { redirect } from 'next/navigation'
 
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  await requireAdmin()
-  return (
-    <div className='min-h-screen bg-gray-50'>
-      <div className='mx-auto max-w-7xl p-6'>{children}</div>
-    </div>
-  )
+  const { userId } = await auth()
+  if (!userId) redirect('/sign-in') // middleware should handle, but safe
+
+  const me = await prisma.customer.findFirst({
+    where: { clerkUserId: userId },
+    select: { role: true },
+  })
+
+  if (me?.role !== 'ADMIN') redirect('/account') // not an admin
+
+  return <>{children}</>
 }

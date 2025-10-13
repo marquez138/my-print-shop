@@ -15,7 +15,10 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <ClerkProvider>
+    <ClerkProvider
+      signInFallbackRedirectUrl='/account'
+      signUpFallbackRedirectUrl='/account'
+    >
       <html lang='en'>
         <body className='min-h-dvh antialiased text-gray-900'>
           <Header />
