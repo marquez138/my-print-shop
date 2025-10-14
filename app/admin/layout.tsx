@@ -18,7 +18,7 @@ export default async function AdminLayout({
     select: { role: true },
   })
 
-  if (me?.role !== 'ADMIN') redirect('/account') // or a 404/notFound() if you prefer
+  if (me?.role !== 'ADMIN') redirect('/admin') // or a 404/notFound() if you prefer
 
   return <>{children}</>
 }
