@@ -3,11 +3,11 @@ import Link from 'next/link'
 import { requireAdmin } from '@/lib/authz'
 import { prisma } from '@/lib/db'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AdminDashboardPage() {
-  // Protect this page
   const me = await requireAdmin()
 
-  // Optional: fetch some lightweight dashboard stats
   const [designCount, orderCount, userCount] = await Promise.all([
     prisma.design.count(),
     prisma.order.count(),
@@ -21,7 +21,6 @@ export default async function AdminDashboardPage() {
         Welcome back, <span className='font-medium'>{me.name || me.email}</span>
       </p>
 
-      {/* Summary cards */}
       <div className='mt-8 grid grid-cols-1 sm:grid-cols-3 gap-6'>
         <DashboardCard
           label='Pending Designs'
@@ -43,7 +42,6 @@ export default async function AdminDashboardPage() {
         />
       </div>
 
-      {/* Quick links */}
       <section className='mt-10'>
         <h2 className='text-lg font-semibold'>Quick Actions</h2>
         <div className='mt-3 space-x-3'>

@@ -1,3 +1,4 @@
+// app/products/[slug]/StartDesignButton.tsx
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
@@ -7,31 +8,31 @@ import { SignedIn, SignedOut, SignInButton, useAuth } from '@clerk/nextjs'
 export default function StartDesignButton({
   slug,
   basePrice,
-  color, // ⬅ receives selected color (e.g., "black")
+  color, // optional (e.g., "black")
   className = '',
 }: {
   slug: string
   basePrice: number // cents
-  color?: string // optional, but recommended
+  color?: string
   className?: string
 }) {
   const router = useRouter()
   const { isSignedIn } = useAuth()
   const [busy, setBusy] = useState(false)
-
   const FLAG_KEY = `startDesign:${slug}`
 
   const createDraft = useCallback(async () => {
     try {
       setBusy(true)
       const variantSku = color ? `${slug}-${color}` : `${slug}-default`
+
       const res = await fetch('/api/designs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           productId: slug,
           variantSku,
-          color, // ⬅ persist for admin visibility (optional in your Design model)
+          color, // optional: if your Design model includes it
           basePrice,
         }),
       })
@@ -40,11 +41,10 @@ export default function StartDesignButton({
       const designId: string | undefined = data?.design?.id
       if (!designId) throw new Error('Missing designId in response')
 
-      // Carry color + base to design page
       const qs = new URLSearchParams()
       qs.set('base', String(basePrice))
       if (color) qs.set('color', color)
-      qs.set('designId', designId) // optional; design page also searches by productId+draft
+      qs.set('designId', designId)
 
       router.push(`/design/${slug}?${qs.toString()}`)
     } catch (e) {
@@ -58,6 +58,7 @@ export default function StartDesignButton({
     }
   }, [slug, basePrice, color, router])
 
+  // If the user clicked while signed out, we flag it & auto-continue after sign-in.
   useEffect(() => {
     if (!isSignedIn) return
     try {
@@ -80,7 +81,7 @@ export default function StartDesignButton({
       </SignedIn>
 
       <SignedOut>
-        <SignInButton mode='modal'>
+        <SignInButton mode='modal' fallbackRedirectUrl='/post-sign-in'>
           <button
             type='button'
             onClick={() => {
