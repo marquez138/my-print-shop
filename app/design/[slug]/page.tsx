@@ -11,6 +11,7 @@ import UploadButton from '@/components/Design/UploadButton'
 import DesignStatusBanner from '@/components/Design/DesignStatusBanner'
 import CommentsList from '@/components/Design/CommentsList'
 import { useToast } from '@/components/common/Toast'
+import SizesForm from '@/components/Design/SizesForm'
 
 type ServerDesign = {
   id: string
@@ -24,6 +25,12 @@ type ServerDesign = {
     author: string
     body: string
     createdAt: string
+  }[]
+  lineItems?: {
+    size: string
+    qty: number
+    unitPrice: number
+    surcharge: number
   }[]
 }
 
@@ -278,6 +285,27 @@ export default function DesignPage({
             ? 'Resubmit for review'
             : 'Submit for approval'}
         </button>
+
+        {design?.status === 'approved' && (
+          <div className='lg:col-span-12'>
+            <SizesForm
+              designId={design.id}
+              sizes={['S', 'M', 'L', 'XL', '2XL']} // adjust to your catalog
+              basePriceCents={design.pricingBase}
+              initial={
+                design.lineItems?.map((li) => ({
+                  size: li.size,
+                  qty: li.qty,
+                  unitPrice: li.unitPrice,
+                  surcharge: li.surcharge ?? 0,
+                })) ?? []
+              }
+              onSaved={() => {
+                // Optional: refetch design or show a toast
+              }}
+            />
+          </div>
+        )}
       </aside>
 
       {Toast}

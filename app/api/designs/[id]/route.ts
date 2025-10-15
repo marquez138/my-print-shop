@@ -25,6 +25,7 @@ export async function GET(
           orderBy: { createdAt: 'asc' },
           select: { id: true, author: true, body: true, createdAt: true },
         },
+        lineItems: { orderBy: { size: 'asc' } }, // 👈 add this
       },
     })
 

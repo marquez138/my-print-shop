@@ -70,7 +70,7 @@ model Design {
   anonymousId  String?
   productId    String
   variantSku   String
-  color        String? // ← keep if you want it
+  color        String?
   status       String            @default("draft")
   pricingBase  Int
   pricingFees  Int
@@ -82,6 +82,7 @@ model Design {
   printSpec    Json
   placements   DesignPlacement[]
   comments     DesignComment[]
+  lineItems    DesignLineItem[]   // ← NEW relation
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 }
@@ -129,6 +130,25 @@ model DesignPlacement {
   // 🔒 Enforce exactly one placement per side for a given design
   @@unique([designId, side], name: "designId_side")
 }
+
+// ---------- Quantities for Approved Designs ----------
+
+model DesignLineItem {
+  id          String   @id @default(cuid())
+  designId    String
+  design      Design   @relation(fields: [designId], references: [id], onDelete: Cascade)
+  size        String
+  variantSku  String
+  qty         Int      @default(0)
+  unitPrice   Int      // price per unit (base + surcharge, in cents)
+  surcharge   Int      @default(0) // store size bump in cents
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 👇 This is what enables { where: { designId_size: { designId, size } } }
+  @@unique([designId, size], name: "designId_size")
+}
+
 
 model Product {
   id        String         @id @default(cuid())
