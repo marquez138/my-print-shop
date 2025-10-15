@@ -1,8 +1,8 @@
 // lib/authz.ts
 import 'server-only'
-import { auth, clerkClient } from '@clerk/nextjs/server'
-import { prisma } from '@/lib/db'
+import { auth, clerkClient as clerkClientFactory } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
+import { prisma } from '@/lib/db'
 
 function adminAllowlist(): Set<string> {
   const raw = process.env.ADMIN_EMAILS || ''
@@ -14,12 +14,11 @@ function adminAllowlist(): Set<string> {
   )
 }
 
-export async function currentCustomer() {
+export async function ensureCustomer() {
   const { userId } = await auth()
   if (!userId) return null
 
-  // Try to find existing Customer
-  let user = await prisma.customer.findFirst({
+  let existing = await prisma.customer.findFirst({
     where: { clerkUserId: userId },
     select: {
       id: true,
@@ -29,21 +28,21 @@ export async function currentCustomer() {
       clerkUserId: true,
     },
   })
-  if (user) return user
+  if (existing) return existing
 
-  // Auto-provision from Clerk if missing
-  const cc = await clerkClient()
-  const cUser = await cc.users.getUser(userId)
+  const clerkClient = await clerkClientFactory() // ✅ new factory pattern
+  const cUser = await clerkClient.users.getUser(userId)
+
   const email =
-    cUser.emailAddresses?.find((e) => e.id === cUser.primaryEmailAddressId)
+    cUser.emailAddresses.find((e) => e.id === cUser.primaryEmailAddressId)
       ?.emailAddress ||
-    cUser.emailAddresses?.[0]?.emailAddress ||
+    cUser.emailAddresses[0]?.emailAddress ||
     ''
-  const name = `${cUser.firstName || ''} ${cUser.lastName || ''}`.trim()
+  const name = [cUser.firstName, cUser.lastName].filter(Boolean).join(' ') || ''
 
-  const isAdmin = adminAllowlist().has(email.toLowerCase())
+  const isAdmin = email ? adminAllowlist().has(email.toLowerCase()) : false
 
-  user = await prisma.customer.create({
+  existing = await prisma.customer.create({
     data: {
       clerkUserId: userId,
       email,
@@ -58,21 +57,23 @@ export async function currentCustomer() {
       clerkUserId: true,
     },
   })
+  return existing
+}
 
-  return user
+export async function currentCustomer() {
+  return ensureCustomer()
 }
 
 export async function requireUser() {
-  const me = await currentCustomer()
+  const me = await ensureCustomer()
   if (!me) redirect('/sign-in?redirect_url=/account')
   return me
 }
 
 export async function requireAdmin() {
-  const me = await currentCustomer()
+  const me = await ensureCustomer()
   if (!me) redirect('/sign-in?redirect_url=/admin')
 
-  // Keep role in sync with allow-list on each hit
   const allow = adminAllowlist()
   const shouldBeAdmin = me.email && allow.has(me.email.toLowerCase())
   if (shouldBeAdmin && me.role !== 'ADMIN') {
@@ -85,4 +86,24 @@ export async function requireAdmin() {
 
   if (me.role !== 'ADMIN') redirect('/account')
   return me
+}
+
+export async function requireAdminAPI() {
+  const me = await ensureCustomer()
+  if (!me) return { authorized: false as const, status: 401 as const }
+
+  const allow = adminAllowlist()
+  const shouldBeAdmin = me.email && allow.has(me.email.toLowerCase())
+  if (shouldBeAdmin && me.role !== 'ADMIN') {
+    await prisma.customer.update({
+      where: { clerkUserId: me.clerkUserId },
+      data: { role: 'ADMIN' },
+    })
+    me.role = 'ADMIN'
+  }
+
+  if (me.role !== 'ADMIN')
+    return { authorized: false as const, status: 403 as const }
+
+  return { authorized: true as const, me }
 }

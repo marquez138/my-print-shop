@@ -3,14 +3,15 @@ export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { requireAdminAPI } from '@/lib/authz' // ← updated import
+import { requireAdminAPI } from '@/lib/authz'
 
 /**
  * GET /api/admin/designs?status=submitted
+ * Lists designs for the admin dashboard (optionally filter by status)
  */
 export async function GET(req: Request) {
   const gate = await requireAdminAPI()
-  if (!gate.ok) {
+  if (!gate.authorized) {
     const status = gate.status
     return NextResponse.json(
       { error: status === 401 ? 'Unauthorized' : 'Forbidden' },
@@ -19,15 +20,16 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url)
-  const status = url.searchParams.get('status')
+  const statusFilter = url.searchParams.get('status') ?? undefined
 
   const designs = await prisma.design.findMany({
-    where: status ? { status } : undefined,
+    where: statusFilter ? { status: statusFilter } : undefined,
     orderBy: { updatedAt: 'desc' },
     include: {
       placements: { select: { id: true, side: true, areaId: true } },
       comments: {
         select: { id: true, author: true, body: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
       },
     },
   })
