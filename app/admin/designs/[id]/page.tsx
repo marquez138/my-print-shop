@@ -1,4 +1,3 @@
-// app/admin/designs/[id]/page.tsx
 import Image from 'next/image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -14,6 +13,17 @@ const USD = (c?: number | null) =>
 type Side = 'front' | 'back' | 'sleeve'
 const SIDE_ORDER: Side[] = ['front', 'back', 'sleeve']
 
+// Simple hex map for consistent color chips in admin
+const COLOR_HEX: Record<string, string> = {
+  black: '#000000',
+  white: '#ffffff',
+  ash: '#e1e1e1',
+  green: '#1f7a41',
+  // add more if needed…
+}
+
+/* ---------------- page ---------------- */
+
 export default async function AdminDesignDetail(props: {
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
@@ -24,18 +34,69 @@ export default async function AdminDesignDetail(props: {
   const sp = await props.searchParams
   const side = (typeof sp.side === 'string' ? sp.side : 'front') as Side
 
+  // 1) Load design (placements + comments)
   const design = await prisma.design.findUnique({
     where: { id },
     include: {
       placements: true,
       comments: {
-        // ← was DesignComment
         orderBy: { createdAt: 'asc' },
         select: { id: true, author: true, body: true, createdAt: true },
       },
     },
   })
   if (!design) notFound()
+
+  // 2) Resolve displayColor (design.color → parse from SKU → variant.color)
+  const parsedFromSku = parseColorFromSku(design.variantSku)
+  const variant = await prisma.variant.findUnique({
+    where: { sku: design.variantSku },
+    select: { color: true },
+  })
+  const displayColor =
+    normalizeColorName(design.color) ??
+    normalizeColorName(parsedFromSku) ??
+    normalizeColorName(variant?.color) ??
+    null
+
+  // 3) Try to load product images for that color (note: Design.productId stores slug)
+  let colorImages:
+    | {
+        url: string
+        alt: string | null
+        tag: string | null
+        position: number
+      }[]
+    | null = null
+  const product =
+    (await prisma.product.findUnique({
+      where: { slug: design.productId },
+      select: {
+        id: true,
+        images: {
+          select: {
+            url: true,
+            alt: true,
+            tag: true,
+            color: true,
+            position: true,
+          },
+        },
+      },
+    })) || null
+
+  if (product && displayColor) {
+    const target = displayColor.toLowerCase()
+    colorImages = product.images
+      .filter((img) => (img.color ?? '').toLowerCase() === target)
+      .sort((a, b) => a.position - b.position)
+      .map((i) => ({
+        url: i.url,
+        alt: i.alt,
+        tag: i.tag,
+        position: i.position,
+      }))
+  }
 
   const sidesWithArt = uniqSides(design.placements.map((p) => p.side as Side))
   const currentSide = (
@@ -55,8 +116,9 @@ export default async function AdminDesignDetail(props: {
       {/* Title + meta */}
       <header className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
         <div>
-          <h1 className='text-xl font-semibold'>
-            Design {design.id.slice(0, 8)}…
+          <h1 className='text-xl font-semibold flex items-center gap-3'>
+            <span>Design {design.id.slice(0, 8)}…</span>
+            {displayColor && <ColorPill name={displayColor} />}
           </h1>
           <p className='text-gray-600'>
             Status:{' '}
@@ -65,7 +127,26 @@ export default async function AdminDesignDetail(props: {
             </span>{' '}
             • Updated {new Date(design.updatedAt).toLocaleString()}
           </p>
+          {/* Optional: small rail of product images for the color */}
+          {!!colorImages?.length && (
+            <div className='mt-3 flex gap-2'>
+              {colorImages.slice(0, 4).map((img, i) => (
+                <div
+                  key={i}
+                  className='relative h-16 w-14 overflow-hidden rounded-md border'
+                >
+                  <Image
+                    src={img.url}
+                    alt={img.alt ?? 'Preview'}
+                    fill
+                    className='object-cover'
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+
         <div className='text-sm text-right'>
           <div>
             Total:{' '}
@@ -130,16 +211,14 @@ export default async function AdminDesignDetail(props: {
               Reject if not printable.
             </p>
 
-            <DesignActions
-              designId={design.id}
-              // (Optional: optimistic UX can be added later)
-            />
+            <DesignActions designId={design.id} />
           </div>
+
           <CommentsPanel
             designId={design.id}
             initial={design.comments.map((c) => ({
               ...c,
-              createdAt: c.createdAt.toISOString(), // ✅ serialize Date → string
+              createdAt: c.createdAt.toISOString(),
             }))}
           />
         </aside>
@@ -157,6 +236,25 @@ function uniqSides(input: Side[]) {
   const set = new Set(input)
   return SIDE_ORDER.filter((s) => set.has(s))
 }
+
+function normalizeColorName(name?: string | null) {
+  if (!name) return null
+  return name.trim().toLowerCase()
+}
+
+function parseColorFromSku(sku?: string | null) {
+  if (!sku) return null
+  // Common pattern: slug-color-size OR slug-color
+  const parts = sku.split('-')
+  // find a token that matches known color keys
+  for (const p of parts) {
+    const token = p.toLowerCase()
+    if (COLOR_HEX[token]) return token
+  }
+  return null
+}
+
+/* ---------------- side tabs (add this helper) ---------------- */
 
 function SideTabs({
   id,
@@ -283,5 +381,22 @@ function PreviewCanvas({
         </div>
       )}
     </div>
+  )
+}
+
+/* Small color chip used next to the title */
+function ColorPill({ name }: { name: string }) {
+  const hex = COLOR_HEX[name] ?? '#bbb'
+  const label = name.charAt(0).toUpperCase() + name.slice(1)
+  const border = name === 'white' ? 'border-gray-300' : 'border-transparent'
+  return (
+    <span className='inline-flex items-center gap-2 text-xs text-gray-700'>
+      <span
+        className={`inline-block h-4 w-4 rounded-full border ${border}`}
+        style={{ backgroundColor: hex }}
+        aria-hidden
+      />
+      <span className='capitalize'>{label}</span>
+    </span>
   )
 }

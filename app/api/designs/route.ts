@@ -1,3 +1,4 @@
+// app/api/designs/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -6,8 +7,8 @@ import { prisma } from '@/lib/db'
 
 /**
  * GET /api/designs?productId=slug
- * Returns the most recent design for the signed-in user for this product
- * (draft/submitted/changes_requested/approved/ordered — adjust filter if desired)
+ * Returns the most recent design for the signed-in user for this product.
+ * You can narrow by editable states if desired.
  */
 export async function GET(req: Request) {
   const { userId } = await auth()
@@ -25,7 +26,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    // If you only want “editable” states, narrow to: ['draft','changes_requested','submitted']
+    // If you only want “editable” states, uncomment the status filter below.
     const design = await prisma.design.findFirst({
       where: {
         userId,
@@ -51,49 +52,62 @@ export async function GET(req: Request) {
 
 /**
  * POST /api/designs
- * Body: {
- * productId: string;
- * variantSku?: string;
- * basePrice: number;
- * color?: string; // <-- NEW, persisted to Design.color
+ * Body:
+ * {
+ *   productId: string;
+ *   variantSku?: string;
+ *   basePrice: number; // cents
+ *   color?: string;    // ← persisted on Design.color (optional)
  * }
- * Creates a NEW draft design and returns { design }
- * Auth required (user must be signed in)
+ * Creates a NEW draft design and returns { design }.
  */
 export async function POST(req: Request) {
   const { userId } = await auth()
-  if (!userId)
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const body = await req.json()
-  const { productId, variantSku, basePrice, color } = body as {
-    productId: string
-    variantSku?: string
-    basePrice: number
-    color?: string
   }
 
-  if (!productId || typeof basePrice !== 'number') {
+  try {
+    const body = await req.json()
+    const { productId, variantSku, basePrice, color } = body as {
+      productId: string
+      variantSku?: string
+      basePrice: number
+      color?: string
+    }
+
+    if (!productId || typeof basePrice !== 'number') {
+      return NextResponse.json(
+        { error: 'productId and basePrice are required' },
+        { status: 400 }
+      )
+    }
+
+    // optional: simple color sanity trim
+    const colorClean =
+      typeof color === 'string' && color.trim().length ? color.trim() : null
+
+    const design = await prisma.design.create({
+      data: {
+        userId,
+        productId,
+        variantSku: variantSku ?? `${productId}-${colorClean ?? 'default'}`,
+        color: colorClean, // ← persist color on the Design row
+        status: 'draft',
+        pricingBase: basePrice,
+        pricingFees: 0,
+        pricingTotal: basePrice,
+        printSpec: {},
+      },
+      include: { placements: true, comments: true },
+    })
+
+    return NextResponse.json({ design })
+  } catch (err: any) {
+    console.error('[POST /api/designs] create draft error:', err)
     return NextResponse.json(
-      { error: 'productId and basePrice are required' },
-      { status: 400 }
+      { error: 'Server error', detail: err.message },
+      { status: 500 }
     )
   }
-
-  const design = await prisma.design.create({
-    data: {
-      userId,
-      productId,
-      variantSku: variantSku ?? `${productId}-${color ?? 'default'}`,
-      color: color ?? null, // ← now valid
-      status: 'draft',
-      pricingBase: basePrice,
-      pricingFees: 0,
-      pricingTotal: basePrice,
-      printSpec: {},
-    },
-    include: { placements: true, comments: true },
-  })
-
-  return NextResponse.json({ design })
 }
