@@ -1,3 +1,4 @@
+// app/api/designs/[id]/quantities/route.ts
 export const runtime = 'nodejs'
 
 import { NextResponse } from 'next/server'
@@ -13,7 +14,7 @@ import {
 
 type Ctx = { params: Promise<{ id: string }> }
 
-/* ---------- Strongly typed gate ---------- */
+/* ---------- Gate (owner or admin) ---------- */
 
 type GateOk = {
   ok: true
@@ -32,10 +33,6 @@ type GateFail = {
   error: string
 }
 
-/**
- * Allow owner or admin to access a design.
- * Returns a discriminated union so TS knows `design` exists when ok === true.
- */
 async function assertOwnerOrAdmin(
   designId: string,
   userId?: string | null
@@ -52,20 +49,16 @@ async function assertOwnerOrAdmin(
   })
   if (!d) return { ok: false, status: 404, error: 'Design not found' }
 
-  // Owner
-  if (d.userId && userId && d.userId === userId) {
-    return { ok: true, design: d }
-  }
+  // Owner check
+  if (d.userId && userId && d.userId === userId) return { ok: true, design: d }
 
-  // Admin
+  // Admin check
   if (userId) {
     const me = await prisma.customer.findFirst({
       where: { clerkUserId: userId },
       select: { role: true },
     })
-    if (me?.role === 'ADMIN') {
-      return { ok: true, design: d }
-    }
+    if (me?.role === 'ADMIN') return { ok: true, design: d }
   }
 
   return { ok: false, status: 403, error: 'Forbidden' }
@@ -90,7 +83,6 @@ export async function GET(_req: Request, ctx: Ctx) {
       select: { size: true, qty: true, unitPrice: true, surcharge: true },
     })
 
-    // Normalize to a full map for summary
     const qMap = Object.fromEntries(
       SIZE_ORDER.map((s) => [s, items.find((i) => i.size === s)?.qty ?? 0])
     ) as Record<SizeCode, number>
@@ -107,9 +99,13 @@ export async function GET(_req: Request, ctx: Ctx) {
   }
 }
 
-/* ---------- PUT: upsert quantities ---------- */
+/* ---------- Shared writer (PUT/POST) ---------- */
 
-export async function PUT(req: Request, ctx: Ctx) {
+async function writeQuantities(
+  req: Request,
+  ctx: Ctx,
+  methodLabel: 'PUT' | 'POST'
+) {
   try {
     const { userId } = await auth()
     if (!userId)
@@ -131,27 +127,45 @@ export async function PUT(req: Request, ctx: Ctx) {
       )
     }
 
-    const body = (await req.json()) as {
-      quantities?: Record<string, number | string | null | undefined>
-    }
-    if (!body?.quantities) {
+    const body = (await req.json()) as
+      | { quantities?: Record<string, number | string | null | undefined> }
+      | {
+          items?: Array<{
+            size: string
+            qty: number
+            unitPrice?: number
+            surcharge?: number
+          }>
+        }
+
+    // Accept either "quantities" map OR "items" array
+    let normalized: Record<SizeCode, number>
+    if ('quantities' in body && body.quantities) {
+      normalized = normalizeQuantities(body.quantities)
+    } else if ('items' in body && Array.isArray(body.items)) {
+      const map: Partial<Record<SizeCode, number>> = {}
+      for (const s of SIZE_ORDER) map[s] = 0
+      for (const it of body.items) {
+        const size = (it.size?.toUpperCase?.() as SizeCode) || 'M'
+        if (SIZE_ORDER.includes(size))
+          map[size] = Math.max(0, Number(it.qty) || 0)
+      }
+      normalized = map as Record<SizeCode, number>
+    } else {
       return NextResponse.json(
-        { error: 'quantities is required' },
+        { error: 'Provide either "quantities" map or "items" array' },
         { status: 400 }
       )
     }
 
-    // Validate & normalize
-    const normalized = normalizeQuantities(body.quantities)
-
-    // Build line items with surcharges & unit prices
-    const upserts = buildLineItems(
+    // Build line items with pricing
+    const lineItems = buildLineItems(
       design.pricingBase,
       design.variantSku,
       normalized
     )
 
-    // Apply transactionally
+    // Apply transactionally (delete zeroes, upsert > 0)
     await prisma.$transaction(async (tx) => {
       const zeroSizes = SIZE_ORDER.filter((s) => (normalized[s] ?? 0) === 0)
       if (zeroSizes.length) {
@@ -160,9 +174,10 @@ export async function PUT(req: Request, ctx: Ctx) {
         })
       }
 
-      for (const item of upserts) {
+      for (const item of lineItems) {
+        if (item.qty <= 0) continue
         await tx.designLineItem.upsert({
-          where: { designId_size: { designId, size: item.size } },
+          where: { designId_size: { designId, size: item.size } }, // composite uniq key
           update: {
             qty: item.qty,
             unitPrice: item.unitPrice,
@@ -181,25 +196,32 @@ export async function PUT(req: Request, ctx: Ctx) {
       }
     })
 
-    // Read back and summarize
+    // Return fresh items + summary
     const items = await prisma.designLineItem.findMany({
       where: { designId },
       orderBy: { size: 'asc' },
       select: { size: true, qty: true, unitPrice: true, surcharge: true },
     })
-
     const qMap = Object.fromEntries(
       SIZE_ORDER.map((s) => [s, items.find((i) => i.size === s)?.qty ?? 0])
     ) as Record<SizeCode, number>
-
     const summary = summarizeQuantities(design.pricingBase, qMap)
 
-    return NextResponse.json({ ok: true, items, summary })
+    return NextResponse.json({ ok: true, method: methodLabel, items, summary })
   } catch (err: any) {
-    console.error('[PUT /api/designs/:id/quantities]', err)
+    console.error(`[${methodLabel} /api/designs/:id/quantities]`, err)
     return NextResponse.json(
       { error: 'Server error', detail: err.message },
       { status: 500 }
     )
   }
+}
+
+export async function PUT(req: Request, ctx: Ctx) {
+  return writeQuantities(req, ctx, 'PUT')
+}
+
+export async function POST(req: Request, ctx: Ctx) {
+  // Kept for clients that send POST; identical behavior to PUT
+  return writeQuantities(req, ctx, 'POST')
 }

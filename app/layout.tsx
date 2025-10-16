@@ -24,7 +24,7 @@ export default function RootLayout({
       <html lang='en'>
         <body className='min-h-dvh antialiased text-gray-900'>
           <Header />
-          <main className='mx-auto max-w-[1500px] p-6'>{children}</main>
+          <main className='mx-auto max-w-[1600px] p-6'>{children}</main>
           <Footer />
         </body>
       </html>

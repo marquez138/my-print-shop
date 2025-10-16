@@ -3,18 +3,29 @@
 import Image from 'next/image'
 import type { PrintArea } from '@/config/print-areas'
 
+// A sensible default safe-area box (center-ish, generous)
+const DEFAULT_BOX: PrintArea['box'] = { x: 0.2, y: 0.18, w: 0.6, h: 0.6 }
+
+// Accept either a full PrintArea or a partial with optional box
+type AreaInput =
+  | PrintArea
+  | (Omit<PrintArea, 'box'> & { box?: PrintArea['box'] })
+
 export default function DesignCanvas({
   area,
   artUrl,
-  baseColorHex = '#ffffff', // ← NEW
+  baseColorHex = '#ffffff',
 }: {
-  area: PrintArea
+  area: AreaInput
   artUrl?: string
   baseColorHex?: string
 }) {
+  // Normalize: always have a box
+  const box = area.box ?? DEFAULT_BOX
+
   return (
-    <div className='relative w-full aspect-[4/5] rounded-xl overflow-hidden border bg-gray-50'>
-      {/* 1) Garment color layer (sits at the very back) */}
+    <div className='relative w-full aspect-[1/1] overflow-hidden bg-gray-50'>
+      {/* 1) Garment color layer */}
       <div
         className='absolute inset-0'
         style={{ backgroundColor: baseColorHex }}
@@ -36,22 +47,22 @@ export default function DesignCanvas({
       <div
         className='absolute border-2 border-dashed border-white/70'
         style={{
-          left: `${area.box.x * 100}%`,
-          top: `${area.box.y * 100}%`,
-          width: `${area.box.w * 100}%`,
-          height: `${area.box.h * 100}%`,
+          left: `${box.x * 100}%`,
+          top: `${box.y * 100}%`,
+          width: `${box.w * 100}%`,
+          height: `${box.h * 100}%`,
         }}
       />
 
-      {/* 4) Artwork preview, auto-fit inside safe area (cover) */}
+      {/* 4) Artwork preview, auto-fit inside safe area (contain) */}
       {artUrl && (
         <div
           className='absolute overflow-hidden'
           style={{
-            left: `${area.box.x * 100}%`,
-            top: `${area.box.y * 100}%`,
-            width: `${area.box.w * 100}%`,
-            height: `${area.box.h * 100}%`,
+            left: `${box.x * 100}%`,
+            top: `${box.y * 100}%`,
+            width: `${box.w * 100}%`,
+            height: `${box.h * 100}%`,
           }}
         >
           <Image

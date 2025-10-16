@@ -66,6 +66,7 @@ enum PrintSide {
 
 model Design {
   id           String            @id @default(cuid())
+  
   userId       String?
   anonymousId  String?
   productId    String
@@ -83,6 +84,8 @@ model Design {
   placements   DesignPlacement[]
   comments     DesignComment[]
   lineItems    DesignLineItem[]   // ← NEW relation
+  submittedAt       DateTime?     // ← new
+  submittedSnapshot Json?         // ← new
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 }

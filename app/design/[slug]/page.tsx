@@ -1,9 +1,9 @@
 'use client'
 
-import { use, useEffect, useMemo, useState } from 'react'
+import { use, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { PRINT_AREAS, type PrintArea } from '@/config/print-areas'
-import { resolveHex } from '@/config/colors' // ← NEW
+import { resolveHex } from '@/config/colors'
 import DesignCanvas from '@/components/Design/DesignCanvas'
 import PrintAreaList from '@/components/Design/PrintAreaList'
 import PriceSummary from '@/components/Design/PriceSummary'
@@ -19,6 +19,7 @@ type ServerDesign = {
   pricingFees: number
   pricingTotal: number
   status: string
+  color?: string | null
   placements?: { areaId: string; url: string }[]
   comments?: {
     id: string
@@ -39,7 +40,7 @@ export default function DesignPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>
-  searchParams: Promise<{ base?: string; designId?: string; color?: string }> // ← color from PDP
+  searchParams: Promise<{ base?: string; designId?: string; color?: string }>
 }) {
   const router = useRouter()
   const { slug } = use(params)
@@ -48,7 +49,6 @@ export default function DesignPage({
   const designId = q?.designId
   const basePrice = Number.isFinite(Number(q?.base)) ? Number(q!.base) : 2500
 
-  // NEW: garment color (default white if missing/unknown)
   const selectedColorId = (q?.color ?? 'white').toLowerCase()
   const garmentHex = resolveHex(selectedColorId, '#ffffff')
 
@@ -58,10 +58,12 @@ export default function DesignPage({
   const [busy, setBusy] = useState(false)
   const { toast, Toast } = useToast()
 
+  // Controlled quantities (used only if approved, but harmless to keep)
+  const [quantities, setQuantities] = useState<Record<string, number>>({})
+
   const canEdit =
     design?.status === 'draft' || design?.status === 'changes_requested'
 
-  // 🌟 Require designId and load that design
   useEffect(() => {
     let mounted = true
     ;(async () => {
@@ -78,18 +80,32 @@ export default function DesignPage({
         })
         if (!res.ok) throw new Error(await res.text())
         const data = await res.json()
+        const d: ServerDesign = data.design
+
+        // 🚦 GUARD: if the design is NOT editable, bounce to dashboard detail
+        // Editable = draft | changes_requested. Anything else redirects.
+        if (d && !['draft', 'changes_requested'].includes(d.status)) {
+          router.replace(`/dashboard/designs/${d.id}`)
+          return
+        }
 
         if (mounted) {
-          setDesign(data.design)
+          setDesign(d)
+
           const existingUploads: Record<string, string> = {}
-          data.design.placements?.forEach((p: any) => {
+          d.placements?.forEach((p: any) => {
             existingUploads[p.areaId] = p.url
           })
           setUploads(existingUploads)
+
+          const seed: Record<string, number> = {}
+          d.lineItems?.forEach((li: any) => {
+            seed[li.size] = li.qty
+          })
+          setQuantities(seed)
         }
       } catch (err) {
         console.error('Failed to load design by id:', err)
-        alert('Failed to load this design. Redirecting to product.')
         router.replace(`/products/${slug}`)
       } finally {
         setBusy(false)
@@ -100,7 +116,6 @@ export default function DesignPage({
     }
   }, [designId, slug, router])
 
-  // 🌟 Upload handler — one-per-side logic preserved
   async function handleUploaded(r: {
     secure_url: string
     public_id: string
@@ -115,7 +130,7 @@ export default function DesignPage({
       setBusy(true)
       const side = activeArea.side
 
-      // optimistic one-per-side cleanup
+      // One-per-side optimistic update
       setUploads((u) => {
         const next = { ...u }
         for (const area of PRINT_AREAS) {
@@ -125,7 +140,6 @@ export default function DesignPage({
         return next
       })
 
-      // persist on server
       const res = await fetch(`/api/designs/${design.id}/placements`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -141,7 +155,7 @@ export default function DesignPage({
       if (!res.ok) throw new Error(await res.text())
       const data = await res.json()
 
-      // rebuild uploads from server placements
+      // Rebuild from server
       const serverUploads: Record<string, string> = {}
       for (const p of data.design.placements ?? []) {
         if (p.url && p.areaId) serverUploads[p.areaId] = p.url
@@ -157,7 +171,6 @@ export default function DesignPage({
     }
   }
 
-  // 🌟 Remove artwork locally (optional)
   function clearActive() {
     setUploads((u) => {
       const next = { ...u }
@@ -166,7 +179,47 @@ export default function DesignPage({
     })
   }
 
+  async function handleProceedToCheckout() {
+    if (!design) return
+    try {
+      setBusy(true)
+      const putRes = await fetch(`/api/designs/${design.id}/quantities`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantities }),
+      })
+      const putData = await putRes.json()
+      if (!putRes.ok) {
+        alert(putData?.error || 'Failed to save quantities.')
+        return
+      }
+
+      const coRes = await fetch(`/api/checkout/design/${design.id}`, {
+        method: 'POST',
+      })
+      const coData = await coRes.json()
+      if (!coRes.ok) {
+        alert(coData?.error || 'Unable to start checkout.')
+        return
+      }
+      if (coData?.url) window.location.href = coData.url
+      else router.push('/checkout/success')
+    } catch (e) {
+      console.error(e)
+      alert('Checkout failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const hasArt = !!uploads[activeArea.id]
+  const canShowSubmit =
+    !!design &&
+    hasArt &&
+    (design.status === 'draft' ||
+      design.status === 'changes_requested' ||
+      design.status === 'submitted')
+
   const effectiveBase = design?.pricingBase ?? basePrice
   const serverFees = design?.pricingFees ?? 0
   const serverTotal = design?.pricingTotal ?? effectiveBase
@@ -174,6 +227,35 @@ export default function DesignPage({
   return (
     <div className='grid grid-cols-1 lg:grid-cols-12 gap-8'>
       {/* Left panel */}
+      <aside className='lg:col-span-2'>
+        <PrintAreaList
+          active={activeArea}
+          onSelect={setActiveArea}
+          uploads={uploads}
+        />
+      </aside>
+
+      {/* Center canvas with garment color */}
+      <section className='lg:col-span-7'>
+        <DesignCanvas
+          area={activeArea}
+          artUrl={uploads[activeArea.id]}
+          baseColorHex={garmentHex}
+        />
+        <div className='mt-3 text-sm text-gray-600'>
+          Showing side:{' '}
+          <span className='font-medium capitalize'>{activeArea.side}</span>
+          <span className='ml-3 inline-flex items-center gap-2'>
+            <span
+              className='inline-block h-3 w-3 rounded-full border'
+              style={{ backgroundColor: garmentHex }}
+            />
+            <span className='capitalize'>{selectedColorId}</span>
+          </span>
+        </div>
+      </section>
+
+      {/* Right column */}
       <aside className='lg:col-span-3 space-y-6'>
         {design && <DesignStatusBanner status={design.status} />}
         <h1 className='text-2xl font-semibold uppercase'>{slug}</h1>
@@ -200,6 +282,7 @@ export default function DesignPage({
             disabled={!canEdit || busy}
           />
         )}
+
         {!canEdit && (
           <p className='mt-2 text-xs text-gray-500'>
             Editing is disabled while your design is <b>{design?.status}</b>.
@@ -221,76 +304,47 @@ export default function DesignPage({
             />
           </div>
         )}
-      </aside>
 
-      {/* Center canvas with garment color */}
-      <section className='lg:col-span-6'>
-        <DesignCanvas
-          area={activeArea}
-          artUrl={uploads[activeArea.id]}
-          baseColorHex={garmentHex} // ← color layer
-        />
-        <div className='mt-3 text-sm text-gray-600'>
-          Showing side:{' '}
-          <span className='font-medium capitalize'>{activeArea.side}</span>
-          <span className='ml-3 inline-flex items-center gap-2'>
-            <span
-              className='inline-block h-3 w-3 rounded-full border'
-              style={{ backgroundColor: garmentHex }}
-            />
-            <span className='capitalize'>{selectedColorId}</span>
-          </span>
-        </div>
-      </section>
-
-      {/* Right area list */}
-      <aside className='lg:col-span-3'>
-        <PrintAreaList
-          active={activeArea}
-          onSelect={setActiveArea}
-          uploads={uploads}
-        />
-
-        {/* ✅ Submit or Resubmit button */}
-        <button
-          className='mt-4 w-full h-11 rounded-lg bg-black text-white disabled:opacity-60'
-          disabled={!design || busy || design.status === 'submitted'}
-          onClick={async () => {
-            if (!design) return
-            setBusy(true)
-            try {
-              const res = await fetch(`/api/designs/${design.id}/submit`, {
-                method: 'POST',
-              })
-              const data = await res.json()
-              if (!res.ok) {
-                alert(data?.error || 'Submit failed')
-                return
+        {/* Submit / Resubmit — only when ACTIVE area has art */}
+        {canShowSubmit && (
+          <button
+            className='mt-4 w-full h-11 rounded-lg bg-black text-white disabled:opacity-60'
+            disabled={busy || design?.status === 'submitted'}
+            onClick={async () => {
+              if (!design) return
+              setBusy(true)
+              try {
+                const res = await fetch(`/api/designs/${design.id}/submit`, {
+                  method: 'POST',
+                })
+                const data = await res.json()
+                if (!res.ok) {
+                  alert(data?.error || 'Submit failed')
+                  return
+                }
+                setDesign(data.design)
+                router.push('/dashboard/designs?submitted=1')
+              } catch (e) {
+                console.error(e)
+                alert('Submit failed')
+              } finally {
+                setBusy(false)
               }
-              setDesign(data.design)
-              router.push('/dashboard/designs?submitted=1') // redirect after submit
-            } catch (e) {
-              console.error(e)
-              alert('Submit failed')
-            } finally {
-              setBusy(false)
-            }
-          }}
-        >
-          {busy
-            ? 'Submitting…'
-            : design?.status === 'submitted'
-            ? 'Submitted'
-            : design?.status === 'changes_requested'
-            ? 'Resubmit for review'
-            : 'Submit for approval'}
-        </button>
+            }}
+          >
+            {busy
+              ? 'Submitting…'
+              : design?.status === 'changes_requested'
+              ? 'Resubmit for review'
+              : 'Submit for approval'}
+          </button>
+        )}
 
+        {/* Quantities + Proceed (approved only) */}
         {design?.status === 'approved' && (
-          <div className='lg:col-span-12'>
+          <div className='mt-6 space-y-3'>
             <SizesForm
-              designId={design.id}
-              sizes={['S', 'M', 'L', 'XL', '2XL']} // adjust to your catalog
+              sizes={['S', 'M', 'L', 'XL', '2XL']}
               basePriceCents={design.pricingBase}
               initial={
                 design.lineItems?.map((li) => ({
@@ -300,10 +354,17 @@ export default function DesignPage({
                   surcharge: li.surcharge ?? 0,
                 })) ?? []
               }
-              onSaved={() => {
-                // Optional: refetch design or show a toast
-              }}
+              onChange={(map) => setQuantities(map)}
             />
+
+            <button
+              type='button'
+              onClick={handleProceedToCheckout}
+              disabled={busy}
+              className='w-full h-11 rounded-lg bg-emerald-600 text-white disabled:opacity-60'
+            >
+              {busy ? 'Processing…' : 'Proceed to checkout'}
+            </button>
           </div>
         )}
       </aside>
